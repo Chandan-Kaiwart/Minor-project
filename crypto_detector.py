@@ -1,0 +1,296 @@
+"""
+Cryptographic Algorithm Detector
+Identifies cryptographic algorithms in source code and configuration files
+References: RSA, ECC, AES, SHA, DES, 3DES, DSA, DH, etc.
+"""
+
+import re
+from typing import List, Dict, Any, Optional
+
+
+class CryptoDetector:
+    """Detects cryptographic algorithm usage in files"""
+    
+    # Cryptographic algorithm patterns and their quantum vulnerability
+    CRYPTO_PATTERNS = {
+        # Public Key Cryptography (Quantum-vulnerable)
+        'RSA': {
+            'patterns': [
+                r'\bRSA\b',
+                r'RSAPublicKey',
+                r'RSAPrivateKey',
+                r'RSA_PKCS1',
+                r'rsa_sign',
+                r'rsa_encrypt',
+                r'RSA/ECB',
+                r'RSAES',
+                r'RSASSA',
+                r'RSAEngine'
+            ],
+            'quantum_vulnerable': True,
+            'attack': 'Shor\'s Algorithm',
+            'category': 'asymmetric'
+        },
+        'ECC': {
+            'patterns': [
+                r'\bECC\b',
+                r'\bECDSA\b',
+                r'\bECDH\b',
+                r'EllipticCurve',
+                r'secp256r1',
+                r'secp384r1',
+                r'secp521r1',
+                r'prime256v1',
+                r'P-256',
+                r'P-384',
+                r'P-521',
+                r'ed25519',
+                r'curve25519',
+                r'ECPublicKey',
+                r'ECPrivateKey'
+            ],
+            'quantum_vulnerable': True,
+            'attack': 'Shor\'s Algorithm',
+            'category': 'asymmetric'
+        },
+        'DSA': {
+            'patterns': [
+                r'\bDSA\b',
+                r'DSAPublicKey',
+                r'DSAPrivateKey',
+                r'DSS\b',
+                r'Digital Signature Algorithm'
+            ],
+            'quantum_vulnerable': True,
+            'attack': 'Shor\'s Algorithm',
+            'category': 'asymmetric'
+        },
+        'DH': {
+            'patterns': [
+                r'\bDiffie[-\s]?Hellman\b',
+                r'\bDHE\b',
+                r'\bECDHE\b',
+                r'DHParameters',
+                r'DH_compute_key'
+            ],
+            'quantum_vulnerable': True,
+            'attack': 'Shor\'s Algorithm',
+            'category': 'key_exchange'
+        },
+        
+        # Symmetric Cryptography (Moderately vulnerable to Grover's)
+        'AES': {
+            'patterns': [
+                r'\bAES\b',
+                r'AES[-_]?128',
+                r'AES[-_]?192',
+                r'AES[-_]?256',
+                r'AES/CBC',
+                r'AES/GCM',
+                r'AES/CTR',
+                r'AES/ECB',
+                r'Rijndael'
+            ],
+            'quantum_vulnerable': False,  # Requires key size doubling
+            'attack': 'Grover\'s Algorithm (requires larger keys)',
+            'category': 'symmetric'
+        },
+        'DES': {
+            'patterns': [
+                r'\bDES\b',
+                r'3DES',
+                r'TripleDES',
+                r'DES3',
+                r'DES/CBC',
+                r'DESede'
+            ],
+            'quantum_vulnerable': True,  # Already weak
+            'attack': 'Grover\'s Algorithm (already broken)',
+            'category': 'symmetric'
+        },
+        'ChaCha20': {
+            'patterns': [
+                r'ChaCha20',
+                r'ChaCha20-Poly1305'
+            ],
+            'quantum_vulnerable': False,
+            'attack': 'Grover\'s Algorithm (requires larger keys)',
+            'category': 'symmetric'
+        },
+        
+        # Hash Functions
+        'SHA-1': {
+            'patterns': [
+                r'\bSHA1\b',
+                r'\bSHA-1\b',
+                r'sha1',
+                r'SHA1Digest'
+            ],
+            'quantum_vulnerable': True,  # Already weak
+            'attack': 'Grover\'s Algorithm (already broken)',
+            'category': 'hash'
+        },
+        'SHA-2': {
+            'patterns': [
+                r'SHA[-_]?256',
+                r'SHA[-_]?384',
+                r'SHA[-_]?512',
+                r'SHA2',
+                r'SHA-2'
+            ],
+            'quantum_vulnerable': False,  # Needs larger output
+            'attack': 'Grover\'s Algorithm (requires larger output)',
+            'category': 'hash'
+        },
+        'SHA-3': {
+            'patterns': [
+                r'SHA3',
+                r'SHA-3',
+                r'Keccak'
+            ],
+            'quantum_vulnerable': False,
+            'attack': 'Grover\'s Algorithm (quantum-resistant)',
+            'category': 'hash'
+        },
+        'MD5': {
+            'patterns': [
+                r'\bMD5\b',
+                r'md5'
+            ],
+            'quantum_vulnerable': True,  # Already broken
+            'attack': 'Already broken (pre-quantum)',
+            'category': 'hash'
+        }
+    }
+    
+    # Key size patterns
+    KEY_SIZE_PATTERN = r'(?:key[_\s]?size|keysize|bits?)[:\s=]+(\d+)'
+    
+    def __init__(self):
+        self.findings = []
+    
+    def detect_crypto(self, file_info: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Detect cryptographic algorithms in a file
+        
+        Args:
+            file_info: File information dictionary from FileScanner
+        
+        Returns:
+            List of cryptographic findings
+        """
+        findings = []
+        content = file_info.get('content')
+        
+        if not content:
+            return findings
+        
+        # Convert bytes to string if needed
+        if isinstance(content, bytes):
+            try:
+                content = content.decode('utf-8', errors='ignore')
+            except:
+                return findings
+        
+        # Search for each cryptographic algorithm
+        for algo_name, algo_info in self.CRYPTO_PATTERNS.items():
+            for pattern in algo_info['patterns']:
+                matches = re.finditer(pattern, content, re.IGNORECASE)
+                
+                for match in matches:
+                    # Extract context around the match
+                    start = max(0, match.start() - 100)
+                    end = min(len(content), match.end() + 100)
+                    context = content[start:end]
+                    
+                    # Try to extract key size
+                    key_size = self._extract_key_size(context)
+                    
+                    # Get line number
+                    line_number = content[:match.start()].count('\n') + 1
+                    
+                    finding = {
+                        'algorithm': algo_name,
+                        'file': file_info['path'],
+                        'file_name': file_info['name'],
+                        'file_type': file_info.get('file_type', 'source_code'),
+                        'line': line_number,
+                        'matched_text': match.group(),
+                        'context': context.strip(),
+                        'quantum_vulnerable': algo_info['quantum_vulnerable'],
+                        'attack_vector': algo_info['attack'],
+                        'category': algo_info['category'],
+                        'key_size': key_size
+                    }
+                    
+                    findings.append(finding)
+        
+        # Remove duplicates (same algorithm, same file, similar line)
+        findings = self._deduplicate_findings(findings)
+        
+        return findings
+    
+    def _extract_key_size(self, context: str) -> Optional[int]:
+        """Extract key size from context"""
+        match = re.search(self.KEY_SIZE_PATTERN, context, re.IGNORECASE)
+        if match:
+            try:
+                return int(match.group(1))
+            except:
+                pass
+        
+        # Look for common key sizes in context
+        common_sizes = [1024, 2048, 3072, 4096, 128, 192, 256, 384, 512]
+        for size in common_sizes:
+            if str(size) in context:
+                return size
+        
+        return None
+    
+    def _deduplicate_findings(self, findings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Remove duplicate findings from the same location"""
+        seen = set()
+        unique_findings = []
+        
+        for finding in findings:
+            key = (
+                finding['algorithm'],
+                finding['file'],
+                finding['line'] // 5  # Group nearby lines
+            )
+            
+            if key not in seen:
+                seen.add(key)
+                unique_findings.append(finding)
+        
+        return unique_findings
+    
+    def get_statistics(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Generate statistics from findings"""
+        stats = {
+            'total_findings': len(findings),
+            'vulnerable_count': 0,
+            'by_algorithm': {},
+            'by_category': {},
+            'by_file_type': {}
+        }
+        
+        for finding in findings:
+            algo = finding['algorithm']
+            category = finding['category']
+            file_type = finding.get('file_type', 'source_code')
+            
+            # Count vulnerabilities
+            if finding['quantum_vulnerable']:
+                stats['vulnerable_count'] += 1
+            
+            # Count by algorithm
+            stats['by_algorithm'][algo] = stats['by_algorithm'].get(algo, 0) + 1
+            
+            # Count by category
+            stats['by_category'][category] = stats['by_category'].get(category, 0) + 1
+            
+            # Count by file type
+            stats['by_file_type'][file_type] = stats['by_file_type'].get(file_type, 0) + 1
+        
+        return stats

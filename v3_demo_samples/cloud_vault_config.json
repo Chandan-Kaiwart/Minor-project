@@ -1,0 +1,9 @@
+{
+    "vault_id": "PQC_CLOUD_DEMO",
+    "region": "us-east-1",
+    "encryption_level": "PRE-PQC",
+    "secret_keys": {
+        "api_key": "AKIA_DEMO_RSA_VULNERABLE",
+        "private_pass": "StandardRSA-2048-ShouldUpgrade"
+    }
+}
