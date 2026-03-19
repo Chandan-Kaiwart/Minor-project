@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify, send_file
-import os, sys, time, random, tempfile, shutil, subprocess, requests
-from io import BytesIO
+import os, sys, time, random, tempfile, shutil, subprocess, requests, re, zipfile
+import io
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
 
@@ -933,6 +933,7 @@ async function executeScan() {
     if(githubUrl) {
         const fd = new FormData();
         fd.append('url', githubUrl);
+        fd.append('token', $('gh-token-in').value);
         url = '/v3/audit/github';
         fetchOptions.body = fd;
         await typeTerm('term-logs', 'Synchronizing with GitHub repository: ' + githubUrl);
@@ -1106,18 +1107,34 @@ def audit_path():
 @app.route('/v3/audit/github', methods=['POST'])
 def audit_github():
     repo_url = request.form.get('url')
+    token = request.form.get('token')
     if not repo_url: return jsonify({'status': 'error', 'message': 'No GitHub URL provided'})
+    
+    match = re.search(r'github\.com/([^/]+)/([^/\.]+)', repo_url)
+    if not match: return jsonify({'status': 'error', 'message': 'Invalid GitHub URL format'})
+    owner, repo = match.groups()
     
     tmp_path = tempfile.mkdtemp()
     try:
-        # Shallow clone for maximum scan speed
-        subprocess.check_call(['git', 'clone', '--depth', '1', repo_url, tmp_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        api_url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
+        headers = {'Accept': 'application/vnd.github.v3+json'}
+        if token: headers['Authorization'] = f'token {token}'
+        
+        r = requests.get(api_url, headers=headers, stream=True, timeout=30)
+        if r.status_code != 200:
+            return jsonify({'status': 'error', 'message': f'GitHub API Error: {r.status_code} - Is the repo public?'})
+            
+        with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+            z.extractall(tmp_path)
+        
+        # Zipball extracts into a subfolder like owner-repo-hash, so we scan the root tmp_path recursively
         report = manager.scan_system_path(tmp_path)
         app.latest_scan = report
         return jsonify(report)
     except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        return jsonify({'status': 'error', 'message': f"Archive Extraction Failed: {str(e)}"})
     finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
         shutil.rmtree(tmp_path, ignore_errors=True)
 
 @app.route('/v3/live-threats')
@@ -1148,7 +1165,7 @@ def download_report():
     for v in scan.get('vulnerable_implementations', []):
         m = v.get('objective_metadata', {})
         ws.append([f"Line {v.get('line', '?')}", v['algorithm'], v.get('risk_level','?'), m.get('how_vulnerable','-'), m.get('prevention','-')])
-    buf = BytesIO()
+    buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name="EmeraldSec_Unified_Report.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
