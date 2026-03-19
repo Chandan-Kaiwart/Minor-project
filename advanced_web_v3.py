@@ -997,7 +997,7 @@ async function executeScan() {
             if($('ring-status')) $('ring-status').style.background = `conic-gradient(var(--primary) 0% ${readyPct}%, var(--danger) ${readyPct}% 100%)`;
 
             // HIGHLY DEFINED RESULT BLOCK (USER REQUEST)
-            if(data.vulnerable_implementations.length > 0) {
+            if(data.vulnerable_implementations && data.vulnerable_implementations.length > 0) {
                 $('vuln-tbody').innerHTML = data.vulnerable_implementations.map((v, i) => `
                     <tr>
                         <td style="border-left: 2px solid ${v.risk_level==='CRITICAL'?'var(--danger)':'var(--warning)'}; border-top-left-radius:8px; border-bottom-left-radius:8px;">
@@ -1008,7 +1008,7 @@ async function executeScan() {
                             <div style="font-family:'JetBrains Mono'; color:var(--text-white); font-size: 0.9rem; background:rgba(255,255,255,0.05); padding:5px 8px; border-radius:4px; display:inline-block;">${v.algorithm}</div>
                         </td>
                         <td>
-                            <div class="badge ${v.risk_level === 'CRITICAL' ? 'badge-crit' : 'badge-high'}">${v.risk_level}</div>
+                            <div class="badge ${v.risk_level === 'CRITICAL' ? 'badge-crit' : (v.risk_level === 'HIGH' ? 'badge-high' : 'badge-warn')}">${v.risk_level}</div>
                             <div style="font-size:0.65rem; color:var(--text-dim); margin-top:5px; line-height:1.4;">${v.objective_metadata.how_vulnerable}</div>
                         </td>
                         <td style="background: rgba(0, 250, 136, 0.03);">
@@ -1027,16 +1027,21 @@ async function executeScan() {
         }
     } catch(e) {
         await typeTerm('term-logs', 'FATAL: ' + e.message, 'err');
-    } finally {
-        // Handled by audio.onended for perfect sync
     }
 }
 
-// Global Initialization & Mission Recovery
-window.onload = function() {
-    setInterval(drawMatrix, 35);
-    drawMapAttacks();
-    
+// Global Initialization & Persistent Recovery
+function initMissionVault() {
+    // Immediate Theme Recovery (Pre-render)
+    const savedTheme = localStorage.getItem('pqc_theme');
+    if(savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        const icon = $('theme-icon');
+        const txt = $('theme-text');
+        if(icon) icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+        if(txt) txt.innerText = "Light Mode";
+    }
+
     // Persistent GitHub Connection Recovery
     const savedUser = localStorage.getItem('pqc_gh_user');
     const savedToken = localStorage.getItem('pqc_gh_token');
@@ -1045,26 +1050,24 @@ window.onload = function() {
 
     if(savedUser) {
         githubUser = savedUser;
-        $('gh-text').innerText = "Browsing: " + savedUser;
-        $('gh-action-btn').classList.add('connected');
+        if($('gh-text')) $('gh-text').innerText = "Browsing: " + savedUser;
+        if($('gh-action-btn')) $('gh-action-btn').classList.add('connected');
     }
-    if(savedToken) $('gh-token-in').value = savedToken;
+    if(savedToken && $('gh-token-in')) $('gh-token-in').value = savedToken;
     if(savedRepo && savedName) {
         selectedGitHubRepo = savedRepo;
-        $('gh-text').innerText = "Repo: " + savedName;
-        $('gh-action-btn').style.borderColor = 'var(--primary)';
+        if($('gh-text')) $('gh-text').innerText = "Repo: " + savedName;
+        if($('gh-action-btn')) {
+            $('gh-action-btn').style.borderColor = 'var(--primary)';
+            $('gh-action-btn').classList.add('connected');
+        }
     }
+}
 
-    // Theme Recovery
-    const savedTheme = localStorage.getItem('pqc_theme');
-    if(savedTheme === 'light') {
-        document.body.classList.add('light-theme');
-        const icon = $('theme-icon');
-        const txt = $('theme-text');
-        icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
-        txt.innerText = "Light Mode";
-    }
-};
+// Kickstart
+initMissionVault();
+setInterval(drawMatrix, 35);
+drawMapAttacks();
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 </script>
 </body>
