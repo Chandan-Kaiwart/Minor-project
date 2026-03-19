@@ -13,6 +13,26 @@ class CryptoDetector:
     
     # Cryptographic algorithm patterns and their quantum vulnerability
     CRYPTO_PATTERNS = {
+        # Post-Quantum Cryptography (Quantum-Resistant)
+        'ML-KEM': {
+            'patterns': [r'ML-KEM', r'Kyber'],
+            'quantum_vulnerable': False,
+            'attack': 'None: Post-Quantum Secure',
+            'category': 'pqc_kem'
+        },
+        'ML-DSA': {
+            'patterns': [r'ML-DSA', r'Dilithium'],
+            'quantum_vulnerable': False,
+            'attack': 'None: Post-Quantum Secure',
+            'category': 'pqc_signature'
+        },
+        'SLH-DSA': {
+            'patterns': [r'SLH-DSA', r'SPHINCS\+'],
+            'quantum_vulnerable': False,
+            'attack': 'Quantum Resistant (Hash-based)',
+            'category': 'pqc_signature'
+        },
+        
         # Public Key Cryptography (Quantum-vulnerable)
         'RSA': {
             'patterns': [
@@ -55,7 +75,7 @@ class CryptoDetector:
         },
         'DSA': {
             'patterns': [
-                r'\bDSA\b',
+                r'(?<!ML-)\bDSA\b',
                 r'DSAPublicKey',
                 r'DSAPrivateKey',
                 r'DSS\b',
@@ -91,8 +111,8 @@ class CryptoDetector:
                 r'AES/ECB',
                 r'Rijndael'
             ],
-            'quantum_vulnerable': False,  # Requires key size doubling
-            'attack': 'Grover\'s Algorithm (requires larger keys)',
+            'quantum_vulnerable': False,  # Managed by Grover's Resistance
+            'attack': 'Grover\'s Algorithm (Quadratic speedup; safe with 256-bit keys)',
             'category': 'symmetric'
         },
         'DES': {

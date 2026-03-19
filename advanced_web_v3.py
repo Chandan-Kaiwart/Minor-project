@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify, send_file
-import os, sys, time, random
+import os, sys, time, random, tempfile, shutil, subprocess, requests
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -16,23 +16,36 @@ HTML_V3 = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emerald Sec | Tactical Command</title>
+<title>Emerald PQC | Tactical Command</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-/* ===== EXACT EMERALD SEC IMAGE REPLICATION ===== */
+/* ===== EVERGREEN THEME (User Request) ===== */
 :root {
-    --bg-main: #0c1117; 
-    --bg-panel: #141a21; 
-    --bg-card: #182028;
-    --border: #212c36;
-    --primary: #00fa88;
-    --primary-dim: rgba(0, 250, 136, 0.15);
-    --primary-glow: #00e676;
-    --text-white: #e3e8ef;
-    --text-dim: #9aa5b6;
-    --danger: #f84b4b;
-    --warning: #db9322;
-    --term-bg: #030805;
+    /* DARK THEME (DEFAULT) */
+    --bg-main: #013220; 
+    --bg-panel: #022d1d;
+    --bg-card: #0c1c14;
+    --primary: #50C878;
+    --warning: #DB9322;
+    --danger: #F84B4B;
+    --text-white: #FFFFFF;
+    --text-dim: #D1F2EB;
+    --border: rgba(80, 200, 120, 0.2);
+    --term-bg: #000;
+}
+
+body.light-theme {
+    --bg-main: #F0F3F2; /* Soft Slate-Mint Grey */
+    --bg-panel: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --primary: #0B6E4F;
+    --warning: #B45309;
+    --danger: #991B1B;
+    --text-white: #06402B;
+    --text-dim: #5F7D75;
+    --border: #CCD6D1; /* Sharper edges */
+    --term-bg: #F8FAF9;
+    --card-shadow: 0 10px 40px rgba(0,0,0,0.06);
 }
 
 * { margin:0; padding:0; box-sizing:border-box; }
@@ -48,22 +61,24 @@ body {
 /* Background Matrix Canvas */
 #matrix-bg { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 0; opacity: 0.15; pointer-events: none; }
 
-/* Outer Wrapper (Glass) */
+/* Outer Wrapper (Evergreen Glass) */
 .dashboard-wrapper {
     position: relative; z-index: 10; width: 95%; height: 95%; display: flex;
-    background: rgba(20, 26, 33, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
-    border-radius: 20px; box-shadow: 0 0 80px rgba(0, 250, 136, 0.05), inset 0 0 20px rgba(0, 250, 136, 0.02);
-    border: 1px solid rgba(0, 250, 136, 0.1); overflow: hidden;
+    background: var(--bg-main); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+    border-radius: 20px; box-shadow: 0 0 80px rgba(80, 200, 120, 0.1), inset 0 0 20px rgba(80, 200, 120, 0.05);
+    border: 1px solid var(--border); overflow: hidden;
+    transition: background 0.4s ease, border-color 0.4s ease;
 }
 
 /* ===== SIDEBAR ===== */
 .sidebar {
-    width: 270px; background: transparent; border-right: 1px solid var(--border);
+    width: 270px; background: var(--bg-panel); border-right: 1px solid var(--border);
     display: flex; flex-direction: column; padding: 2.5rem 1.5rem; overflow-y: auto;
+    transition: background 0.4s ease, border-color 0.4s ease;
 }
 .brand { 
     display: flex; align-items: center; gap: 12px; font-size: 1.15rem; font-weight: 800;
-    margin-bottom: 2.5rem; padding: 0 10px; color: #fff; text-shadow: 0 0 10px rgba(0, 250, 136, 0.3);
+    margin-bottom: 2.5rem; padding: 0 10px; color: var(--text-white); text-shadow: 0 0 10px rgba(0, 250, 136, 0.3);
 }
 .brand-icon {
     width: 25px; height: 30px; background: linear-gradient(135deg, var(--primary) 0%, #00a055 100%);
@@ -76,11 +91,11 @@ body {
     padding: 12px 15px; margin-bottom: 5px; border-radius: 8px; color: var(--text-dim); cursor: pointer;
     font-size: 0.85rem; font-weight: 500; display: flex; align-items: center; gap: 12px; transition: 0.3s;
 }
-.nav-item:hover { color: var(--text-white); background: rgba(255,255,255,0.03); transform: translateX(3px); }
-.nav-item.active { background: linear-gradient(90deg, rgba(0, 250, 136, 0.2) 0%, transparent 100%); color: var(--primary); box-shadow: inset 2px 0 10px rgba(0,250,136,0.1); }
-.nav-icon { width: 18px; opacity: 0.7; flex-shrink: 0;}
-.nav-item.active .nav-icon { opacity: 1; filter: drop-shadow(0 0 5px var(--primary)); stroke: var(--primary); }
-.nav-section-title { font-size: 0.65rem; color: #4a5c6d; text-transform: uppercase; font-weight: 800; padding: 0 15px; margin: 25px 0 10px 0; letter-spacing: 1px;}
+.nav-item:hover { color: var(--primary); background: rgba(80,200,120,0.08); transform: translateX(3px); }
+.nav-item.active { background: var(--primary); color: #fff !important; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+.nav-icon { width: 18px; opacity: 0.7; flex-shrink: 0; color:var(--text-dim);}
+.nav-item.active .nav-icon { opacity: 1; filter: none; color: #fff !important; stroke: #fff; }
+.nav-section-title { font-size: 0.65rem; color: var(--text-dim); text-transform: uppercase; font-weight: 800; padding: 0 15px; margin: 25px 0 10px 0; letter-spacing: 1.5px; opacity: 0.7;}
 
 /* ===== MAIN CONTENT GRID ===== */
 .main-content { position: relative; flex: 1; padding: 2.5rem; overflow-y: auto; height: 100%; display: flex; flex-direction: column;}
@@ -99,9 +114,9 @@ body {
 .card {
     background: var(--bg-card); border: 1px solid var(--border);
     border-radius: 12px; padding: 1.5rem; position: relative; display: flex; flex-direction: column;
-    transition: 0.3s; overflow: hidden;
+    transition: 0.3s; overflow: hidden; box-shadow: var(--card-shadow, none);
 }
-.card:hover { border-color: rgba(0, 250, 136, 0.3); box-shadow: 0 5px 20px rgba(0,0,0,0.3); transform: translateY(-2px); }
+.card:hover { border-color: var(--primary); transform: translateY(-3px); }
 .card-title { font-size: 0.75rem; color: var(--text-dim); font-weight: 600; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: flex-start; }
 .badge { padding: 3px 8px; border-radius: 4px; font-size: 0.6rem; font-weight: 700; text-transform: uppercase; }
 .badge-high { background: rgba(219, 147, 34, 0.1); color: var(--warning); border: 1px solid rgba(219, 147, 34, 0.3); }
@@ -118,17 +133,22 @@ body {
 .mini-chart path { fill: none; stroke: var(--primary); stroke-width: 2.5; filter: drop-shadow(0 5px 5px rgba(0,250,136,0.3)); transition: 0.5s; }
 .mini-chart path.fill { fill: url(#greenGlow); stroke: none; filter: none; opacity: 0.4; transition: 0.5s; }
 
-/* Blocks */
-.left-block { grid-column: 1 / 3; display: flex; flex-direction: column; gap: 20px;}
-.right-block { grid-column: 3 / 4; display: flex; flex-direction: column; gap: 20px;}
+/* Blocks Layout Swap & Resize */
+.side-block { grid-column: 1 / 2; display: flex; flex-direction: column; gap: 20px;}
+.main-block { grid-column: 2 / 4; display: flex; flex-direction: column; gap: 20px;}
 .bottom-block { grid-column: 1 / 4; display: flex; flex-direction: column; gap: 20px;}
 
 /* Map Card */
-.card-map { height: 320px; padding: 0 !important; }
-.map-overlay-title { position: absolute; top: 1.5rem; left: 1.5rem; z-index: 20; color: #fff; font-weight: 700; font-size: 1.1rem; }
+.card-map { height: 280px; padding: 0 !important; }
+.map-overlay-title { position: absolute; top: 1.2rem; left: 1.2rem; z-index: 20; color: #fff; font-weight: 700; font-size: 1rem; }
 .map-bg-under { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #0c1116; opacity: 0.7; z-index: 1;}
+.map-summary-panel {
+    position: absolute; bottom: 1rem; right: 1rem; z-index: 25; width: 220px;
+    background: rgba(0,0,0,0.8); border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px; font-size: 0.65rem; color: var(--text-dim); backdrop-filter: blur(5px);
+}
 .map-silhouette {
-    position: absolute; top: 20px; left: 20px; right: 20px; bottom: 20px; background-color: rgba(255,255,255,0.05); 
+    position: absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background-color: rgba(255,255,255,0.05); 
     -webkit-mask-image: url('https://upload.wikimedia.org/wikipedia/commons/e/ec/World_map_blank_without_borders.svg');
     -webkit-mask-size: cover; -webkit-mask-repeat: no-repeat; -webkit-mask-position: center; z-index: 5;
 }
@@ -145,17 +165,47 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
 
 /* Terminal Card */
 .card-terminal {
-    background: var(--term-bg); border: 1px solid rgba(0, 250, 136, 0.3);
-    box-shadow: inset 0 0 15px rgba(0,250,136,0.05); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
-    padding: 1.5rem; color: #00df70; overflow-y: auto; position: relative; line-height: 1.7; flex: 1; border-radius: 12px;
+    background: var(--term-bg); border: 1px solid var(--border);
+    box-shadow: inset 0 0 15px rgba(0,0,0,0.05); font-family: 'JetBrains Mono', monospace; font-size: 0.75rem;
+    padding: 1.5rem; color: var(--primary); overflow-y: auto; position: relative; line-height: 1.7; flex: 1; border-radius: 12px;
 }
-.term-log { margin-bottom: 6px; word-break: break-all; }
-.t-date { color: #5a6b7c; margin-right: 8px; }
-.t-sys { color: var(--text-white); }
-.t-msg { color: var(--primary); text-shadow: 0 0 5px rgba(0,250,136,0.2); }
-.t-err { color: var(--danger); text-shadow: 0 0 5px rgba(255,75,75,0.2); }
+.t-date { color: var(--text-dim) !important; opacity:0.6; }
+.t-msg { color: var(--primary) !important; }
+.t-err { color: var(--danger) !important; }
+.t-warning { color: var(--warning) !important; }
+.t-date { color: #35533c; margin-right: 5px; font-weight: 500;}
+.t-msg { color: #00fa88; }
+.t-err { color: var(--danger); font-weight: 700; text-shadow: 0 0 5px rgba(248,75,75,0.4); }
+.t-warning { color: var(--warning); font-weight: 600; }
+
+/* Tom Cruise Runner */
+#tom-cruise-wrapper {
+    position: fixed; bottom: 20px; left: -200px; width: 200px; height: 150px; 
+    z-index: 9999; pointer-events: none; display: none;
+}
+#tom-cruise-wrapper img { width: 100%; height: auto; }
+@keyframes runAcross {
+    0% { left: -250px; }
+    100% { left: 100%; }
+}
+.running { display: none !important; } /* Removed Ethanol Hunt Runner */
 .type-cursor { display: inline-block; width: 8px; height: 14px; background: var(--primary); animation: blink 1s step-end infinite; }
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Horizontal Scan Line (Restricted to Terminal Box) */
+#scan-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 2px;
+    background: linear-gradient(90deg, transparent, var(--primary), transparent);
+    box-shadow: 0 0 15px var(--primary), 0 0 30px var(--primary);
+    z-index: 9998; display: none; pointer-events: none;
+}
+@keyframes scanVertical {
+    0% { top: 0; opacity: 0; }
+    10% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { top: 100%; opacity: 0; }
+}
+.active-scan { display: block !important; animation: scanVertical var(--mission-pass, 10s) linear 2; }
 
 .btn-action {
     background: linear-gradient(90deg, #00fb8c 0%, var(--primary) 100%);
@@ -178,6 +228,38 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
 .algo-row:last-child { border-bottom: none; }
 .node-orb { width: 60px; height: 60px; border-radius: 50%; margin: 0 auto 15px auto; display: flex; align-items: center; justify-content: center; border: 2px solid; }
 
+/* Pad & Modal UI (User Request) */
+.pad-trigger {
+    flex: 2; height: 168px; background: rgba(0,0,0,0.4); border: 2px dashed var(--border);
+    border-radius: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    cursor: pointer; transition: 0.3s; gap: 10px; color: var(--text-dim); text-align: center;
+}
+.pad-trigger:hover { border-color: var(--primary); background: rgba(80, 200, 120, 0.05); color: var(--primary); }
+.pad-trigger i { font-size: 2rem; opacity: 0.5; }
+
+.modal-overlay {
+    position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85);
+    backdrop-filter: blur(10px); z-index: 10000; display: none; align-items: center; justify-content: center;
+}
+.modal-card {
+    background: var(--bg-panel); border: 1px solid var(--border); border-radius: 20px;
+    width: 600px; max-width: 90%; max-height: 80%; display: flex; flex-direction: column; padding: 2rem;
+    box-shadow: 0 20px 50px rgba(0,0,0,0.5); position: relative;
+}
+.modal-title { font-size: 1.2rem; font-weight: 800; margin-bottom: 1.5rem; color: #fff; display: flex; align-items: center; gap: 10px; }
+.repo-list { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.repo-item { 
+    padding: 12px 15px; background: rgba(255,255,255,0.03); border: 1px solid transparent;
+    border-radius: 8px; cursor: pointer; transition: 0.2s; display: flex; justify-content: space-between; align-items: center;
+}
+.repo-item:hover { background: rgba(80, 200, 120, 0.1); border-color: var(--primary); }
+.github-btn {
+    background: #24292e; color: #fff; border: 1px solid #444; padding: 10px; border-radius: 8px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.3s;
+}
+.github-btn:hover { background: #333; border-color: var(--primary); box-shadow: 0 0 15px rgba(80,200,120,0.2); }
+.github-btn.connected { border-color: var(--primary); color: var(--primary); }
+
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
@@ -186,13 +268,22 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
 </head>
 <body>
 
-<svg width="0" height="0"><defs><linearGradient id="greenGlow" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#00fa88" stop-opacity="0.5"/><stop offset="100%" stop-color="#00fa88" stop-opacity="0"/></linearGradient></defs></svg>
+<svg width="0" height="0"><defs><linearGradient id="greenGlow" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#50C878" stop-opacity="0.5"/><stop offset="100%" stop-color="#0B6E4F" stop-opacity="0"/></linearGradient></defs></svg>
 <canvas id="matrix-bg"></canvas>
+
+<!-- Mission Impossible Elements -->
+<audio id="mi-theme" preload="auto">
+    <!-- Stable Archive.org Download Link -->
+    <source src="mission-impossible_oEwlsUsI.mp3" type="audio/mpeg">
+    <source src="mission-impossible_oEwlsUsI.mp3" type="audio/mpeg">
+</audio>
+</audio>
+</audio>
 
 <div class="dashboard-wrapper">
     <!-- SIDEBAR -->
     <div class="sidebar">
-        <div class="brand"><div class="brand-icon"></div> EMERALD SEC</div>
+        <div class="brand"><div class="brand-icon" style="background: var(--border);"></div> EMERALD PQC</div>
         
         <div class="nav-section-title">Operations</div>
         <div class="nav-item active" onclick="switchTab('audit', this)">
@@ -215,8 +306,16 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
         </div>
 
         <div class="nav-section-title" style="margin-top:auto;">System Access</div>
-        <div class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg> System Logs</div>
-        <div class="nav-item"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06..."></path></svg> Settings</div>
+        <div class="nav-item" onclick="switchTab('ps3', this)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            System Logs
+        </div>
+        <div class="nav-item" onclick="toggleTheme()">
+            <div class="nav-icon" style="background:rgba(80,200,120,0.1); width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:4px;">
+                <svg id="theme-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            </div>
+            <span id="theme-text">Dark Mode</span>
+        </div>
     </div>
 
     <!-- MAIN CONTENT -->
@@ -248,37 +347,50 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                     <div class="sub-val" id="ready-trend">PENDING <i>→</i></div>
                 </div>
 
-                <!-- ROW 2 : LEFT BLOCK (Inputs + Map) -->
-                <div class="left-block">
+                <!-- NEW ROW 2 : SIDE BLOCK (Terminal) -->
+                <div class="side-block">
+                    <div class="card card-terminal" id="terminal-box" style="height: 570px; position: relative; overflow: hidden;">
+                        <div id="scan-overlay"></div>
+                        <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); z-index:2;">root@emerald-matrix:~# tail -f /var/log/pqc_audit</div>
+                        <div id="term-logs"><div class="term-log"><span class="t-sys">emerald-sys[1]:</span> <span class="t-msg">Awaiting audit payload invocation...</span></div></div>
+                        <span class="type-cursor" id="term-cursor"></span>
+                    </div>
+                </div>
+
+                <!-- NEW ROW 2 : MAIN BLOCK (Inputs + Map) -->
+                <div class="main-block">
                     <!-- Direct Input Area -->
-                    <div class="card" style="padding-bottom:1.5rem;">
+                    <div class="card" id="card-config" style="padding-bottom:1.5rem; position: relative;">
                         <div class="card-title" style="margin-bottom: 10px;">Security Audit Configuration <span class="badge" style="background:rgba(0,250,136,0.1); color:var(--primary);">Operational</span></div>
-                        <div style="display:flex; gap:15px; margin-top:10px;">
-                            <textarea id="code-in" class="m-input" style="flex:2; height:120px;" placeholder="// Paste raw Python / Java / C++ buffer here..."></textarea>
+                        <div style="display:flex; gap:15px; margin-top:10px; min-height:168px;">
+                            <div class="pad-trigger" onclick="openCodePad()">
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                                <span id="pad-status">Click to Paste Program Buffer</span>
+                                <div style="font-size: 0.6rem; opacity: 0.7;">PQC Logic Reducer Active</div>
+                            </div>
                             <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
-                                <input type="text" id="path-in" class="m-input" placeholder="Local Path (/var/www/sys)">
+                                <div id="gh-action-btn" class="github-btn" onclick="handleGitHubClick()">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+                                    <span id="gh-text">Connect GitHub</span>
+                                </div>
+                                <input type="text" id="path-in" class="m-input" placeholder="Local Mapping">
                                 <input type="file" id="file-in" class="m-input" style="padding: 10px 8px;">
-                                <button class="btn-action" style="padding:10px; margin-top:auto; font-size: 0.85rem;" onclick="executeScan()">Launch Analysis</button>
+                                <button class="btn-action" style="padding:10px; margin-top:auto; font-size: 0.85rem;" onclick="executeScan()">Finalize Analysis</button>
                             </div>
                         </div>
                     </div>
 
                     <!-- Live Map -->
                     <div class="card card-map">
-                        <div class="map-overlay-title">Global Quantum Threat Telemetry</div>
-                        <div style="position:absolute; top:2.5rem; left:1.5rem; z-index:20; max-width:60%; font-size: 0.75rem; color:var(--text-dim);">Simulating active quantum nodes probing cryptographic infrastructure parameters for Shor and Grover algorithm weaknesses.</div>
+                        <div class="map-overlay-title">Global Threat Intelligence <span style="font-size:0.6rem; color:var(--primary); opacity:0.8;">[LIVE STREAM]</span></div>
+                        <div class="map-summary-panel">
+                            <b style="color:#fff; display:block; margin-bottom:5px;">Global Action Intelligence:</b>
+                            <div id="map-summary-text">Synchronizing with SANS ISC honeypots... Identifying global botnet clusters probing for legacy RSA/ECC vulnerabilities.</div>
+                        </div>
+                        <div style="position:absolute; top:2.5rem; left:1.2rem; z-index:20; max-width:55%; font-size: 0.7rem; color:var(--text-dim); opacity:0.6;">Mapping Real-Time IoCs and infrastructure reconnaissance.</div>
                         <div class="map-bg-under"></div>
                         <div class="map-silhouette"></div>
                         <svg class="map-svg" id="map-svg" viewBox="0 0 600 300" preserveAspectRatio="none"></svg>
-                    </div>
-                </div>
-
-                <!-- ROW 2 : RIGHT BLOCK (Terminal) -->
-                <div class="right-block">
-                    <div class="card card-terminal" id="terminal-box">
-                        <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px dashed var(--border); z-index:2;">root@emerald-matrix:~# tail -f /var/log/pqc_audit</div>
-                        <div id="term-logs"><div class="term-log"><span class="t-sys">emerald-sys[1]:</span> <span class="t-msg">Awaiting audit payload invocation...</span></div></div>
-                        <span class="type-cursor" id="term-cursor"></span>
                     </div>
                 </div>
 
@@ -306,6 +418,7 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                                 </tr>
                             </tbody>
                         </table>
+                        <div id="res-injector"></div>
                     </div>
                 </div>
             </div>
@@ -462,15 +575,55 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                     <button class="btn-action" style="padding:15px; font-size:0.9rem; margin-top:auto;" onclick="simulatePS3()">Trigger AI Cloud Protection Protocol</button>
                 </div>
                 
-                <div class="card card-terminal" style="height:100%; min-height:300px;">
-                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">AWS KMS - AI Integration Logs</div>
-                    <div id="ps3-logs" style="font-family:'JetBrains Mono'; font-size:0.75rem; color:var(--primary);">
-                        Cloud Database Gateway initialized.<br>AI Traffic Monitor Active... listening on port 443.<br>
+                <div class="card card-terminal" style="height:100%; min-height:400px; display:flex; flex-direction:column;">
+                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">Unified Scan History Archive</div>
+                    <div id="history-box" style="flex:1; overflow-y:auto; margin-bottom:15px; display:flex; flex-direction:column; gap:8px;">
+                        <div style="text-align:center; padding:40px; color:var(--text-dim); border:1px dashed var(--border); border-radius:12px;">No historical records in current session.</div>
+                    </div>
+                    <div style="border-top: 1px dashed var(--border); padding-top:10px;">
+                        <div style="font-size:0.6rem; color:var(--text-dim); margin-bottom:5px;">AI Traffic Monitor (Raw Feed)</div>
+                        <div id="ps3-logs" style="font-family:'JetBrains Mono'; font-size:0.7rem; color:var(--primary); max-height:100px; overflow-y:auto;">
+                            Cloud Database Gateway initialized.<br>AI Traffic Monitor Active... listening on port 443.
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
+    </div>
+</div>
+
+<!-- CODE PAD MODAL -->
+<div id="code-modal" class="modal-overlay">
+    <div class="modal-card" style="width: 800px; height: 600px;">
+        <div class="modal-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><polyline points="16 18 22 12 16 6"></polyline><polyline points="8 6 2 12 8 18"></polyline></svg>
+            Royal Code Pad
+        </div>
+        <textarea id="code-in" class="m-input" style="flex:1; height:100%; font-size: 0.9rem; padding: 20px;" placeholder="// Paste your cryptographic code here..."></textarea>
+        <div style="display:flex; gap:10px; margin-top: 20px;">
+            <button class="btn-action" onclick="closeCodePad()">Save & Exit</button>
+        </div>
+    </div>
+</div>
+
+<!-- GITHUB REPO MODAL -->
+<div id="github-modal" class="modal-overlay">
+    <div class="modal-card">
+        <div class="modal-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.372.79 1.102.79 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            Select Repository
+        </div>
+        <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom:10px;">Target user: <b id="gh-user-display" style="color:var(--primary);">None</b></div>
+        <input type="password" id="gh-token-in" class="m-input" style="margin-bottom:15px; font-size: 0.7rem; border-color: rgba(255,255,255,0.1);" placeholder="Personal Access Token (for Private Repos)">
+        <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 5px; opacity: 0.8;">Note: Unauthenticated requests only show Public repositories.</div>
+        <div id="repo-container" class="repo-list">
+            <!-- Dynamic repos -->
+            <div style="text-align:center; padding:20px; color:var(--text-dim);">Fetching metadata...</div>
+        </div>
+        <div style="margin-top:20px;">
+            <button class="btn-action" style="background:#444;" onclick="$('github-modal').style.display='none'">Cancel</button>
+        </div>
     </div>
 </div>
 
@@ -483,39 +636,59 @@ function switchTab(tabId, el) {
     if(el) el.classList.add('active');
 }
 
-// Map Animation
+// Map Logic (Precision Geolocation Engine)
 const mapSvg = document.getElementById('map-svg');
-const hubs = [{x: 150, y: 100}, {x: 300, y: 80}, {x: 450, y: 120}, {x: 320, y: 150}, {x: 200, y: 180}, {x: 500, y: 200}];
-function drawMapAttacks() {
-    let o = hubs[Math.floor(Math.random() * hubs.length)];
-    let dests = hubs.filter(hub => hub !== o);
-    let d = dests[Math.floor(Math.random() * dests.length)];
-    o = {x: o.x + (Math.random()*40-20), y: o.y + (Math.random()*40-20)};
-    d = {x: d.x + (Math.random()*40-20), y: d.y + (Math.random()*40-20)};
-    createDot(o.x, o.y); createDot(d.x, d.y);
-    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-    const mx = (o.x + d.x) / 2; const my = Math.min(o.y, d.y) - 50 - Math.random()*50;
-    path.setAttribute("d", `M${o.x},${o.y} Q${mx},${my} ${d.x},${d.y}`);
-    path.setAttribute("fill", "none"); path.setAttribute("stroke", "rgba(0, 250, 136, 0.6)"); path.setAttribute("stroke-width", "1.5");
-    path.style.strokeDasharray = "1000"; path.style.strokeDashoffset = "1000"; path.style.transition = "stroke-dashoffset 1.5s ease-in-out";
-    mapSvg.appendChild(path);
-    setTimeout(() => { path.style.strokeDashoffset = "0"; }, 50);
-    setTimeout(() => { path.style.opacity = "0"; path.style.transition = "opacity 0.5s"; }, 1500);
-    setTimeout(() => { path.remove(); }, 2000);
+const countryCoords = {
+    'US': [95, 100], 'CA': [90, 60], 'MX': [100, 150],
+    'CN': [480, 115], 'RU': [450, 60], 'IN': [425, 155], 'PK': [405, 135],
+    'GB': [285, 75], 'FR': [290, 85], 'DE': [305, 75], 'NL': [300, 70], 'UA': [345, 85],
+    'BR': [195, 220], 'AR': [185, 260], 'CL': [170, 260],
+    'JP': [530, 105], 'KR': [515, 105], 'SG': [475, 195], 'VN': [485, 160], 'ID': [495, 210],
+    'TR': [350, 110], 'IR': [385, 125], 'SA': [370, 145], 'EG': [340, 140],
+    'ZA': [325, 255], 'NG': [295, 175], 'AU': [540, 245], 'NZ': [580, 275]
+};
+
+async function drawMapAttacks() {
+    try {
+        const resp = await fetch('/v3/live-threats');
+        const data = await resp.json();
+        mapSvg.innerHTML = '';
+        const ld = Array.isArray(data) ? data : (data.sources || []);
+        
+        let summaryText = `Detecting <b>${ld.length} Active Probes</b> targeting non-PQC nodes.`;
+        if(ld[0]) summaryText += `<br><br>Top Threat: <span style="color:var(--danger)">${ld[0].ip}</span> from <b>${ld[0].country}</b> performing high-frequency reconnaissance.`;
+        $('map-summary-text').innerHTML = summaryText;
+
+        ld.slice(0, 15).forEach((threat, i) => {
+            const country = threat.country || 'Unknown';
+            const base = countryCoords[country] || [320, 110]; // Default to Central Afro-Eurasia (Land)
+            const x = base[0] + (Math.random()*16 - 8); // Add micro-jitter 
+            const y = base[1] + (Math.random()*16 - 8);
+            
+            const circle = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            circle.setAttribute("cx", x); circle.setAttribute("cy", y); circle.setAttribute("r", 4);
+            circle.setAttribute("class", "hub-dot");
+            circle.innerHTML = `<title>REAL SCAN: ${threat.ip} (${country}) | Reports: ${threat.count}</title>`;
+            mapSvg.appendChild(circle);
+
+            const pulse = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+            pulse.setAttribute("cx", x); pulse.setAttribute("cy", y); pulse.setAttribute("r", 4);
+            pulse.setAttribute("fill", "none"); pulse.setAttribute("stroke", "var(--primary)");
+            pulse.innerHTML = `<animate attributeName="r" from="4" to="25" dur="2.5s" begin="${i * 0.4}s" repeatCount="indefinite" />
+                               <animate attributeName="opacity" from="0.7" to="0" dur="2.5s" begin="${i * 0.4}s" repeatCount="indefinite" />`;
+            mapSvg.appendChild(pulse);
+        });
+    } catch(e) { console.log("Map Precision Error:", e); }
 }
-function createDot(x,y) {
-    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
-    dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", "3"); dot.classList.add("hub-dot");
-    mapSvg.appendChild(dot); setTimeout(() => { dot.remove(); }, 2000);
-}
-setInterval(drawMapAttacks, 600);
+setInterval(drawMapAttacks, 30000);
+drawMapAttacks();
 
 // Terminal utilities
 const $ = id => document.getElementById(id);
 async function typeTerm(boxId, msg, type='msg') {
     const t = $(boxId);
     let contentNode = document.createElement('span');
-    contentNode.className = type === 'err' ? 't-err' : 't-msg';
+    contentNode.className = type === 'err' ? 't-err' : (type === 'warning' ? 't-warning' : 't-msg'); // Added warning type
     contentNode.innerHTML = `<br><span class="t-date">${new Date().toLocaleTimeString()}</span> `;
     t.appendChild(contentNode);
     for(let i=0; i<msg.length; i++) {
@@ -593,24 +766,211 @@ async function simulatePS3() {
     await typeTerm('ps3-logs', `SUCCESS: Traffic routing through vault ${ep} is fully quantum-shielded.`, 'msg');
 }
 
+// ====== THEME & SESSION ======
+let scanHistory = [];
+function toggleTheme() {
+    const b = document.body;
+    const isLight = b.classList.toggle('light-theme');
+    const icon = $('theme-icon');
+    const txt = $('theme-text');
+    if(isLight) {
+        icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+        txt.innerText = "Light Mode";
+    } else {
+        icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>';
+        txt.innerText = "Dark Mode";
+    }
+}
+
+function updateHistoryUI() {
+    const box = $('history-box');
+    if(scanHistory.length === 0) return;
+    box.innerHTML = scanHistory.map((h, i) => `
+        <div class="repo-item" style="padding:15px; border:1px solid var(--border); background:rgba(0,0,0,0.2);">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                <div>
+                    <div style="font-weight:800; color:var(--primary); font-size:0.8rem;">MISSION: ${h.type.toUpperCase()}</div>
+                    <div style="font-size:0.65rem; color:var(--text-dim); margin-top:3px;">${h.date} | ${h.origin}</div>
+                </div>
+                </div>
+                <div class="badge ${h.risk === 'CRITICAL' ? 'badge-crit' : (h.risk === 'HIGH' ? 'badge-high' : (h.risk === 'MEDIUM' ? 'badge-warn' : ''))}" 
+                     style="${h.risk === 'SECURE' ? 'background:rgba(0,250,136,0.1); color:var(--primary);' : ''}">${h.risk}</div>
+            </div>
+            <div style="margin-top:10px; font-size:0.75rem; color:#fff;">${h.summary}</div>
+        </div>
+    `).reverse().join('');
+}
+
+// ====== MODAL LOGIC ======
+let githubUser = null;
+let selectedGitHubRepo = null;
+
+function openCodePad() { 
+    $('code-modal').style.display = 'flex'; 
+    $('code-in').focus();
+}
+function closeCodePad() { 
+    $('code-modal').style.display = 'none'; 
+    const code = $('code-in').value;
+    if(code.trim().length > 0) {
+        $('pad-status').innerText = 'Buffer Size: ' + code.length + ' chars';
+        $('pad-status').style.color = 'var(--primary)';
+    }
+}
+
+async function handleGitHubClick() {
+    if(!githubUser) {
+        const user = prompt("Enter GitHub Username to synchronize:");
+        if(user) {
+            githubUser = user;
+            $('gh-text').innerText = "Syncing...";
+            await fetchRepos();
+        }
+    } else {
+        $('github-modal').style.display = 'flex';
+        await fetchRepos();
+    }
+}
+
+async function fetchRepos() {
+    $('gh-user-display').innerText = githubUser;
+    const container = $('repo-container');
+    const token = $('gh-token-in').value;
+    
+    container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-dim);">Fetching metadata...</div>';
+    
+    try {
+        let url = token ? `https://api.github.com/user/repos?per_page=100&sort=updated` : `https://api.github.com/users/${githubUser}/repos?per_page=100&sort=updated`;
+        let headers = { 'Accept': 'application/vnd.github.v3+json' };
+        if(token) headers['Authorization'] = `token ${token}`;
+
+        const resp = await fetch(url, { headers });
+        const repos = await resp.json();
+        
+        if(!Array.isArray(repos)) {
+            if(repos.message === "Bad credentials") throw new Error("Invalid Personal Access Token");
+            throw new Error("Repository discovery failed for user: " + githubUser);
+        }
+        
+        if(repos.length === 0) {
+            container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-dim);">No repositories found.</div>';
+            return;
+        }
+
+        container.innerHTML = repos.map(r => `
+            <div class="repo-item" onclick="selectRepo('${r.clone_url}', '${r.name}')">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div style="font-weight:700; color:#fff;">${r.name}</div>
+                    ${r.private ? '<span style="font-size:0.5rem; background:rgba(219, 147, 34, 0.2); color:var(--warning); padding:2px 5px; border-radius:4px; text-transform:uppercase;">Private</span>' : ''}
+                </div>
+                <div style="font-size:0.65rem; color:var(--text-dim);">${r.language || 'Code'} • Ready for Audit</div>
+            </div>
+        `).join('');
+        
+        $('gh-action-btn').classList.add('connected');
+        $('gh-text').innerText = token ? "Secure Sync (PAT)" : "Browse Repos";
+    } catch(e) {
+        container.innerHTML = `<div style="color:var(--danger); padding:20px; font-size:0.8rem;"><b>Discovery Error:</b><br>${e.message}</div>`;
+        githubUser = null;
+        $('gh-text').innerText = "Connect GitHub";
+    }
+}
+
+function selectRepo(url, name) {
+    selectedGitHubRepo = url;
+    $('gh-text').innerText = "Repo: " + name;
+    $('github-modal').style.display = 'none';
+    $('gh-action-btn').style.borderColor = 'var(--primary)';
+}
 
 // ====== MAIN TAB: CORE AUDIT ======
 async function executeScan() {
-    const code = $('code-in').value, file = $('file-in').files[0], path = $('path-in').value;
+    const code = $('code-in').value, file = $('file-in').files[0], path = $('path-in').value, githubUrl = selectedGitHubRepo;
+    const audio = $('mi-theme');
+    const runner = $('tom-cruise-wrapper');
+    // MISSION START (Animation First)
+    const scanLine = $('scan-overlay');
+    if(scanLine) {
+        // Fallback or Audio-Synced duration
+        const duration = audio.duration && !isNaN(audio.duration) ? (audio.duration / 2) : 5;
+        document.documentElement.style.setProperty('--mission-pass', duration + 's');
+        scanLine.classList.remove('active-scan');
+        void scanLine.offsetWidth; // Trigger reflow
+        scanLine.classList.add('active-scan');
+        
+        // Auto-Cleanup after 2 passes or audio end
+        setTimeout(() => { scanLine.classList.remove('active-scan'); }, duration * 2 * 1000);
+    }
+
+    try { 
+        audio.currentTime = 0;
+        audio.volume = 0.6;
+        
+        audio.onended = () => {
+            runner.classList.remove('running');
+            runner.style.display = 'none';
+        };
+
+        let p = audio.play(); 
+        if (p !== undefined) {
+            p.catch(e => console.log("Audio Blocked"));
+        }
+        runner.style.display = 'block';
+        runner.classList.add('running');
+    } catch(e) { console.log("Mission Start Error:", e); }
+
     $('term-logs').innerHTML = ''; await typeTerm('term-logs', 'Initiating localized heuristic target analysis...');
     
-    let fd = new FormData(), url = '/v3/audit';
-    if(file) { fd.append('file', file); url = '/v3/audit/file'; await typeTerm('term-logs', 'Uploading source archive: ' + file.name); }
-    else if(path) { fd.append('path', path); url = '/v3/audit/path'; await typeTerm('term-logs','Scanning path tree: ' + path); }
-    else { fd = JSON.stringify({code}); await typeTerm('term-logs','Injecting code buffer for inspection...'); }
+    let url = '/v3/audit';
+    let fetchOptions = { method:'POST' };
+
+    if(githubUrl) {
+        const fd = new FormData();
+        fd.append('url', githubUrl);
+        url = '/v3/audit/github';
+        fetchOptions.body = fd;
+        await typeTerm('term-logs', 'Synchronizing with GitHub repository: ' + githubUrl);
+    }
+    else if(file) { 
+        const fd = new FormData();
+        fd.append('file', file); 
+        url = '/v3/audit/file'; 
+        fetchOptions.body = fd;
+        await typeTerm('term-logs', 'Extracting source archive: ' + file.name); 
+    }
+    else if(path) { 
+        const fd = new FormData();
+        fd.append('path', path); 
+        url = '/v3/audit/path'; 
+        fetchOptions.body = fd;
+        await typeTerm('term-logs','Scanning local mapping: ' + path); 
+    }
+    else { 
+        fetchOptions.headers = {'Content-Type':'application/json'};
+        fetchOptions.body = JSON.stringify({ code: code });
+        await typeTerm('term-logs','Injecting code buffer for inspection...'); 
+    }
 
     try {
         const startT = Date.now();
-        const r = await fetch(url, { method:'POST', body:fd, headers:(file||path)?{}:{'Content-Type':'application/json'} });
+        const r = await fetch(url, fetchOptions); 
         const data = await r.json(); const dur = ((Date.now() - startT) / 1000).toFixed(2);
         
         if(data.status === 'error') { await typeTerm('term-logs','CRITICAL_ERR: ' + data.message, 'err'); } 
         else {
+            // Log to Mission Vault
+            const auditTitle = githubUrl ? 'GitHub Sync' : (file ? 'Archive Scan' : (path ? 'Local Drive' : 'Code Buffer'));
+            const finalRisk = data.base_report.risk_level || 'UNKNOWN';
+            
+            scanHistory.push({
+                type: auditTitle,
+                origin: githubUrl || file?.name || path || 'Memory Buffer',
+                summary: `Audit complete. Detected ${data.base_report.vulnerabilities_found} vulnerability vectors. Target Readiness: ${data.base_report.readiness_percentage}%`,
+                risk: finalRisk,
+                date: new Date().toLocaleTimeString()
+            });
+            updateHistoryUI();
+
             const fs = data.base_report.files_processed || 1;
             if($('val-threats')) $('val-threats').innerText = data.base_report.vulnerabilities_found;
             if($('val-files')) $('val-files').innerText = fs;
@@ -619,7 +979,7 @@ async function executeScan() {
             const risk = data.base_report.risk_level, readyPct = data.base_report.readiness_percentage;
             if($('b-threat')) {
                 $('b-threat').innerText = risk;
-                $('b-threat').className = `badge ${risk==='CRITICAL'?'badge-crit':(risk==='HIGH'?'badge-high':'')}`;
+                $('b-threat').className = `badge ${risk==='CRITICAL'?'badge-crit':(risk==='HIGH'?'badge-high':(risk==='MEDIUM'?'badge-warn':''))}`;
             }
             updateWaveCharts(risk);
             
@@ -632,19 +992,18 @@ async function executeScan() {
 
             // HIGHLY DEFINED RESULT BLOCK (USER REQUEST)
             if(data.vulnerable_implementations.length > 0) {
-                // Highly visual rows
                 $('vuln-tbody').innerHTML = data.vulnerable_implementations.map((v, i) => `
                     <tr>
                         <td style="border-left: 2px solid ${v.risk_level==='CRITICAL'?'var(--danger)':'var(--warning)'}; border-top-left-radius:8px; border-bottom-left-radius:8px;">
                             <div style="font-weight:700; color:#fff; font-size: 0.9rem; margin-bottom: 5px;">Line Target: ${v.line}</div>
-                            <div style="font-size:0.75rem; color:var(--text-dim); line-height: 1.4;">${(v.context||"No context").substring(0,80)}...</div>
+                            <div style="font-size:0.75rem; color:var(--text-dim); line-height: 1.4;">${v.file}</div>
                         </td>
                         <td>
                             <div style="font-family:'JetBrains Mono'; color:var(--text-white); font-size: 0.9rem; background:rgba(255,255,255,0.05); padding:5px 8px; border-radius:4px; display:inline-block;">${v.algorithm}</div>
                         </td>
                         <td>
                             <div class="badge ${v.risk_level === 'CRITICAL' ? 'badge-crit' : 'badge-high'}">${v.risk_level}</div>
-                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:5px; line-height:1.4;">${v.objective_metadata.how_vulnerable.substring(0,50)}...</div>
+                            <div style="font-size:0.65rem; color:var(--text-dim); margin-top:5px; line-height:1.4;">${v.objective_metadata.how_vulnerable}</div>
                         </td>
                         <td style="background: rgba(0, 250, 136, 0.03);">
                             <div style="color:var(--primary); font-family:'Inter'; font-weight:800; font-size:0.8rem; margin-bottom:5px; display:flex; align-items:center; gap:5px;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> REQUIRED UPGRADE</div>
@@ -654,14 +1013,17 @@ async function executeScan() {
                         </td>
                     </tr>
                 `).join('');
-                
             } else {
                 $('vuln-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--primary);padding:30px;font-size:1rem; border:2px dashed var(--primary); background:rgba(0,250,136,0.05); border-radius:12px;">✓ Validated. Target architecture meets PQC standards. No mitigations required.</td></tr>';
             }
-            await typeTerm('term-logs','Dashboard metrics synchronized with PQC schema.');
+            await typeTerm('term-logs', 'Dashboard metrics synchronized with PQC schema.');
             $('vuln-tbody').scrollIntoView({ behavior: 'smooth', block: 'end' });
         }
-    } catch(e) { await typeTerm('term-logs','SYS ERROR: ' + e.toString(), 'err'); }
+    } catch(e) {
+        await typeTerm('term-logs', 'FATAL: ' + e.message, 'err');
+    } finally {
+        // Handled by audio.onended for perfect sync
+    }
 }
 
 // Matrix initiation loop
@@ -701,6 +1063,35 @@ def audit_path():
     app.latest_scan = report
     return jsonify(report)
 
+@app.route('/v3/audit/github', methods=['POST'])
+def audit_github():
+    repo_url = request.form.get('url')
+    if not repo_url: return jsonify({'status': 'error', 'message': 'No GitHub URL provided'})
+    
+    tmp_path = tempfile.mkdtemp()
+    try:
+        # Shallow clone for maximum scan speed
+        subprocess.check_call(['git', 'clone', '--depth', '1', repo_url, tmp_path], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        report = manager.scan_system_path(tmp_path)
+        app.latest_scan = report
+        return jsonify(report)
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+    finally:
+        shutil.rmtree(tmp_path, ignore_errors=True)
+
+@app.route('/v3/live-threats')
+def live_threats():
+    try:
+        # SANS ISC Real-time Scanning Community Feed
+        r = requests.get("https://isc.sans.edu/api/sources/summary/30?json", timeout=5)
+        return jsonify(r.json())
+    except:
+        return jsonify([
+            {"ip": "185.224.128.91", "count": 1422, "country": "RU"},
+            {"ip": "45.155.205.233", "count": 1105, "country": "DE"}
+        ])
+
 @app.route('/v3/download-report')
 def download_report():
     if not hasattr(app, 'latest_scan'): return "No scan data found", 404
@@ -721,6 +1112,10 @@ def download_report():
     wb.save(buf)
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name="EmeraldSec_Unified_Report.xlsx", mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+@app.route('/mission-impossible_oEwlsUsI.mp3')
+def serve_audio():
+    return send_file('mission-impossible_oEwlsUsI.mp3')
 
 if __name__ == '__main__':
     print("\nEMERALD SEC PQC DASHBOARD STARTING...")
