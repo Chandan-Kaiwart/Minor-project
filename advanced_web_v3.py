@@ -681,7 +681,6 @@ async function drawMapAttacks() {
     } catch(e) { console.log("Map Precision Error:", e); }
 }
 setInterval(drawMapAttacks, 30000);
-drawMapAttacks();
 
 // Terminal utilities
 const $ = id => document.getElementById(id);
@@ -823,6 +822,7 @@ async function handleGitHubClick() {
         const user = prompt("Enter GitHub Username to synchronize:");
         if(user) {
             githubUser = user;
+            localStorage.setItem('pqc_gh_user', user);
             $('gh-text').innerText = "Syncing...";
             await fetchRepos();
         }
@@ -840,6 +840,9 @@ async function fetchRepos() {
     container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-dim);">Fetching metadata...</div>';
     
     try {
+        const token = $('gh-token-in').value;
+        if(token) localStorage.setItem('pqc_gh_token', token);
+        
         let url = token ? `https://api.github.com/user/repos?per_page=100&sort=updated` : `https://api.github.com/users/${githubUser}/repos?per_page=100&sort=updated`;
         let headers = { 'Accept': 'application/vnd.github.v3+json' };
         if(token) headers['Authorization'] = `token ${token}`;
@@ -878,9 +881,12 @@ async function fetchRepos() {
 
 function selectRepo(url, name) {
     selectedGitHubRepo = url;
+    localStorage.setItem('pqc_gh_selected_url', url);
+    localStorage.setItem('pqc_gh_selected_name', name);
     $('gh-text').innerText = "Repo: " + name;
     $('github-modal').style.display = 'none';
     $('gh-action-btn').style.borderColor = 'var(--primary)';
+    $('gh-action-btn').classList.add('connected');
 }
 
 // ====== MAIN TAB: CORE AUDIT ======
@@ -1026,8 +1032,39 @@ async function executeScan() {
     }
 }
 
-// Matrix initiation loop
-setInterval(drawMatrix, 35);
+// Global Initialization & Mission Recovery
+window.onload = function() {
+    setInterval(drawMatrix, 35);
+    drawMapAttacks();
+    
+    // Persistent GitHub Connection Recovery
+    const savedUser = localStorage.getItem('pqc_gh_user');
+    const savedToken = localStorage.getItem('pqc_gh_token');
+    const savedRepo = localStorage.getItem('pqc_gh_selected_url');
+    const savedName = localStorage.getItem('pqc_gh_selected_name');
+
+    if(savedUser) {
+        githubUser = savedUser;
+        $('gh-text').innerText = "Browsing: " + savedUser;
+        $('gh-action-btn').classList.add('connected');
+    }
+    if(savedToken) $('gh-token-in').value = savedToken;
+    if(savedRepo && savedName) {
+        selectedGitHubRepo = savedRepo;
+        $('gh-text').innerText = "Repo: " + savedName;
+        $('gh-action-btn').style.borderColor = 'var(--primary)';
+    }
+
+    // Theme Recovery
+    const savedTheme = localStorage.getItem('pqc_theme');
+    if(savedTheme === 'light') {
+        document.body.classList.add('light-theme');
+        const icon = $('theme-icon');
+        const txt = $('theme-text');
+        icon.innerHTML = '<circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>';
+        txt.innerText = "Light Mode";
+    }
+};
 window.addEventListener('resize', () => { canvas.width = window.innerWidth; canvas.height = window.innerHeight; });
 </script>
 </body>
