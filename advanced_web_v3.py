@@ -283,7 +283,7 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
 <div class="dashboard-wrapper">
     <!-- SIDEBAR -->
     <div class="sidebar">
-        <div class="brand"><div class="brand-icon" style="background: var(--border);"></div> EMERALD PQC</div>
+        <div class="brand"><div class="brand-icon" style="background: var(--border);"></div>PQCRA</div>
         
         <div class="nav-section-title">Operations</div>
         <div class="nav-item active" onclick="switchTab('audit', this)">
