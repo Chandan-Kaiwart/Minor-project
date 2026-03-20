@@ -16,7 +16,7 @@ HTML_V3 = r"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Emerald PQC | Tactical Command</title>
+<title>PQCRA | Tactical Command</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 /* ===== EVERGREEN THEME (User Request) ===== */
@@ -85,7 +85,7 @@ body {
     clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
     display: flex; align-items: center; justify-content: center; position: relative;
 }
-.brand-icon::after { content:'E'; font-family:'JetBrains Mono'; font-weight:900; color:#0c1117; font-size:0.8rem; }
+.brand-icon::after { content:'P'; font-family:'JetBrains Mono'; font-weight:900; color:#0c1117; font-size:0.8rem; }
 
 .nav-item {
     padding: 12px 15px; margin-bottom: 5px; border-radius: 8px; color: var(--text-dim); cursor: pointer;
