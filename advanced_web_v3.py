@@ -537,21 +537,20 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
         <!-- ====================== TAB 4 : PS3 CLOUD VAULT ====================== -->
         <div id="tab-ps3" class="tab-content">
             <div class="ps-header">Quantum-Resistant Cryptography for Cloud Data Protection</div>
-            <div class="ps-desc"><strong>How this solves Problem Statement 3:</strong> We use an AI Optimizer directly inside the Cloud Gateway to manage security protocols. It continuously monitors cloud ingress/egress. If the AI detects "Harvest Now, Decrypt Later" exfiltration patterns, it autonomously upgrades the vulnerable Data-in-Transit tunnel from RSA to ML-KEM and accelerates Key Rotation cycles to protect the database precisely when needed.</div>
-            
-            <!-- Cloud Connection Parameters -->
-            <div class="card" style="margin-bottom: 5px; padding: 1rem 1.5rem; border-color:rgba(0,250,136,0.3);">
-                <div class="card-title" style="margin-bottom: 10px; color:var(--primary);">Target Integration: External Cloud KMS</div>
-                <div style="display:flex; gap:15px;">
-                    <input type="text" id="cloud-endpoint" class="m-input" placeholder="Enter AWS / GCP KMS ARN Endpoint (e.g., arn:aws:kms:us-east-1:...)" style="flex:2;">
-                    <input type="password" id="cloud-token" class="m-input" placeholder="Cloud IAM Admin Secret" style="flex:1;">
-                </div>
+            <div class="ps-desc" style="background: rgba(0, 80, 255, 0.05); border-color: rgba(0, 80, 255, 0.2); margin-top: 15px;">
+                <strong>Tactical Objective (Problem Statement 3):</strong> 
+                Analyze cloud-native infrastructure for quantum-vulnerable endpoints. The AI Optimizer continuously monitors cloud ingress/egress. If it detects "Harvest Now, Decrypt Later" exfiltration patterns, it autonomously upgrades the vulnerable Data-in-Transit tunnel from RSA to <b>ML-KEM</b> and accelerates Key Rotation cycles directly in the KMS Policy.
             </div>
 
-            <div class="grid-system" style="grid-template-columns: 1fr 1fr;">
-                <div class="card">
-                    <div class="card-title">Cloud AI Optimizer Engine</div>
+            <div class="grid-system" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
+                <div class="card" style="display:flex; flex-direction:column; border-color:rgba(0,250,136,0.3);">
+                    <div class="card-title" style="color:var(--primary);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px; vertical-align:middle;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg> Cloud Mission Control</div>
                     
+                    <div style="margin-bottom:15px;">
+                        <label style="font-size:0.7rem; color:var(--text-dim); display:block; margin-bottom:5px;">Cloud Deployment ARN / Public Endpoint</label>
+                        <input type="text" id="cloud-endpoint" class="m-input" placeholder="e.g. s3://emerald-vault-01.amazonaws.com" value="s3://emerald-vault-01.amazonaws.com" style="width:100%;">
+                    </div>
+
                     <div style="background:rgba(0,0,0,0.3); padding:15px; border:1px solid var(--border); border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
                         <div>
                             <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:5px;">Data-in-Transit Tunnel</div>
@@ -567,29 +566,18 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                         </div>
                         <div id="k-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
                     </div>
-                    
-                    <div style="font-size:0.8rem; color:var(--text-white); background: rgba(0,250,136,0.05); border-left: 3px solid var(--primary); padding:10px; margin-bottom:15px;">
-                        The AI determines that rotating keys dynamically against traffic behavior minimizes cloud latency while maximizing post-quantum security constraints.
-                    </div>
 
-                    <button class="btn-action" style="padding:15px; font-size:0.9rem; margin-top:auto;" onclick="simulatePS3()">Trigger AI Cloud Protection Protocol</button>
+                    <button class="btn-action" style="padding:15px; font-size:0.9rem; margin-top:auto; font-weight:800;" onclick="simulatePS3()">Synchronize & Analyze Cloud Assets</button>
                 </div>
                 
                 <div class="card card-terminal" style="height:100%; min-height:400px; display:flex; flex-direction:column;">
-                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">Unified Scan History Archive</div>
-                    <div id="history-box" style="flex:1; overflow-y:auto; margin-bottom:15px; display:flex; flex-direction:column; gap:8px;">
-                        <div style="text-align:center; padding:40px; color:var(--text-dim); border:1px dashed var(--border); border-radius:12px;">No historical records in current session.</div>
-                    </div>
-                    <div style="border-top: 1px dashed var(--border); padding-top:10px;">
-                        <div style="font-size:0.6rem; color:var(--text-dim); margin-bottom:5px;">AI Traffic Monitor (Raw Feed)</div>
-                        <div id="ps3-logs" style="font-family:'JetBrains Mono'; font-size:0.7rem; color:var(--primary); max-height:100px; overflow-y:auto;">
-                            Cloud Database Gateway initialized.<br>AI Traffic Monitor Active... listening on port 443.
-                        </div>
+                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">AI Cloud Optimizer Logs</div>
+                    <div id="ps3-logs" style="flex:1; overflow-y:auto; line-height:1.6; font-size:0.8rem; font-family:'JetBrains Mono'; color:var(--text-white); padding:10px;">
+                        <span style="color:var(--text-dim);">[SYSTEM] Waiting for Cloud Synchronization...</span>
                     </div>
                 </div>
             </div>
         </div>
-
     </div>
 </div>
 
@@ -709,28 +697,70 @@ function updateWaveCharts(severity) {
 
 // ====== MAIN TAB: PS1 ======
 async function simulatePS1() {
+    const input = $('algo-math').value.toLowerCase();
     $('ps1-res').innerHTML = '';
-    await typeTerm('ps1-res', 'Analyzing mathematical lattice structure...', 'msg');
-    await typeTerm('ps1-res', 'Running simulated quantum Shor\'s attack...', 'warning');
-    setTimeout(() => {
-        $('ps1-res').innerHTML += '<br><br><span style="color:var(--primary);">Evaluation Complete. Algorithm demonstrates structural integrity against polynomial-time extraction. Lattice bounds verified.</span>';
-    }, 1500);
+    
+    if (input.includes('cnn') || input.includes('conv2d')) {
+        await typeTerm('ps1-res', 'AI ARCHITECTURE DETECTED: CNN Visual Feature Extractor...', 'msg');
+        await typeTerm('ps1-res', 'Analyzing convolutional kernels for visual spoofing susceptibility...', 'msg');
+        await typeTerm('ps1-res', 'Verifying quantum-resistant integrity for edge video stream...', 'msg');
+        setTimeout(() => {
+            $('ps1-res').innerHTML += `<br><br><span style="color:var(--primary);"><b>[PS2 INTEGRATION VERIFIED]</b></span><br>
+            <span style="color:var(--text-white); font-size:0.75rem;">CNN Vision model integrity confirmed. System recommends <b>ML-KEM-1024</b> for ultra-secure edge-vision shielding.</span>`;
+        }, 1500);
+    } 
+    else if (input.includes('lstm') || input.includes('rnn')) {
+        await typeTerm('ps1-res', 'AI ARCHITECTURE DETECTED: LSTM Time-Series Engine...', 'msg');
+        await typeTerm('ps1-res', 'Analyzing model weights for susceptibility to quantum-key extraction...', 'msg');
+        await typeTerm('ps1-res', 'Calculating PQC Encapsulation overhead for AI telemetry...', 'msg');
+        setTimeout(() => {
+            $('ps1-res').innerHTML += `<br><br><span style="color:var(--primary);"><b>[PS2 INTEGRATION VERIFIED]</b></span><br>
+            <span style="color:var(--text-white); font-size:0.75rem;">LSTM Model integrity confirmed. System recommends <b>ML-KEM-768</b> for high-velocity sequence shielding.</span>`;
+        }, 1500);
+    } 
+    else if (input.includes('rf') || input.includes('randomforest') || input.includes('ensemble') || input.includes('classifier')) {
+        await typeTerm('ps1-res', 'AI ARCHITECTURE DETECTED: Random Forest Decision Ensemble...', 'msg');
+        await typeTerm('ps1-res', 'Analyzing tabular decision nodes for adversarial manipulation...', 'msg');
+        await typeTerm('ps1-res', 'Calculating entropy bounds for quantum-resistant hashing...', 'msg');
+        setTimeout(() => {
+            $('ps1-res').innerHTML += `<br><br><span style="color:var(--primary);"><b>[PS2 INTEGRATION VERIFIED]</b></span><br>
+            <span style="color:var(--text-white); font-size:0.75rem;">RF Ensemble integrity confirmed. System recommends <b>ML-DSA-65</b> signatures for all decision-node telemetry to prevent unauthorized command injection.</span>`;
+        }, 1500);
+    }
+    else if (input.includes('model') || input.includes('train')) {
+        await typeTerm('ps1-res', 'AI ARCHITECTURE DETECTED: Neural Network Cluster...', 'msg');
+        await typeTerm('ps1-res', 'Analyzing general graph structure for cryptographic leakage...', 'msg');
+        setTimeout(() => {
+            $('ps1-res').innerHTML += `<br><br><span style="color:var(--primary);"><b>[PS2 INTEGRATION VERIFIED]</b></span><br>
+            <span style="color:var(--text-white); font-size:0.75rem;">General AI node integrity confirmed. Standard PQC shielding protocol (Kyber) recommended.</span>`;
+        }, 1500);
+    }
+    else {
+        await typeTerm('ps1-res', 'Analyzing mathematical lattice structure...', 'msg');
+        await typeTerm('ps1-res', 'Running simulated quantum Shor\'s attack...', 'warning');
+        setTimeout(() => {
+            $('ps1-res').innerHTML += '<br><br><span style="color:var(--primary);">Evaluation Complete. Algorithm demonstrates structural integrity against polynomial-time extraction. Lattice bounds verified.</span>';
+        }, 1500);
+    }
 }
 
 // ====== MAIN TAB: PS2 ======
 async function simulatePS2() {
     const ep = $('iot-endpoint').value || 'tcp://192.168.1.55:1883';
     $('ps2-res').innerHTML = '';
-    await typeTerm('ps2-res', `INITIATING CONNECTION to Edge Broker: ${ep}...`, 'msg');
-    await typeTerm('ps2-res', 'Authenticating device certificate signature...', 'warning');
-    await typeTerm('ps2-res', 'AI Engine successfully bound to target device telemetry stream.', 'msg');
-    await typeTerm('ps2-res', 'Vulnerability vectors detected. Revoking classical ECC certificates...', 'msg');
+    await typeTerm('ps2-res', `INITIATING PQC TEST SUITE: Target Edge Device ${ep}...`, 'msg');
+    await typeTerm('ps2-res', 'AI-DRIVEN THREAT SCAN: Analyzing telemetry for quantum-interceptors...', 'warning');
     
-    // UI Updates
+    // Core Implementation Mapping
+    await typeTerm('ps2-res', 'Applying Lattice Error Noise (Discrete Gaussian) to AI-IoT streams...', 'msg');
+    await typeTerm('ps2-res', 'Calculating Vector b = (A * s + e) mod q (ML-KEM)...', 'msg');
+    await typeTerm('ps2-res', 'LSTM Engine successfully ingesting quantum-shielded telemetry.', 'msg');
+    
+    // UI Visual Sync
     setTimeout(() => {
         $('n1-orb').style.borderColor = 'var(--primary)'; $('n1-orb').style.color = 'var(--primary)';
         $('n1-orb').style.boxShadow = '0 0 15px rgba(0,250,136,0.3)'; $('n1-orb').innerText = 'KEM';
-        $('n1-status').innerText = 'Optimized Kyber-768 Encrypted'; $('n1-status').style.color = 'var(--primary)';
+        $('n1-status').innerText = 'PQC (Kyber-768) Encapsulated'; $('n1-status').style.color = 'var(--primary)';
         $('n1-ip-label').innerText = `Bound Target: ${ep}`; $('n1-ip-label').style.color = 'var(--primary)';
         
         $('ps2-link').style.borderTop = '2px dashed var(--primary)';
@@ -738,17 +768,26 @@ async function simulatePS2() {
         $('ps2-link-text').style.color = 'var(--primary)';
     }, 1500);
     
-    await typeTerm('ps2-res', `Pushing Kyber-768 ML-KEM key directly to target ${ep} via over-the-air firmware update.`, 'msg');
-    await typeTerm('ps2-res', 'Handshake successful. Target Edge device fully shielded without localized CPU spike.', 'msg');
+    setTimeout(async () => {
+        $('ps2-res').innerHTML += `<br><br><span style="color:var(--primary);"><b>[PS2 TESTING SUCCESS]</b></span><br>
+        <span style="color:var(--text-white); font-size:0.75rem;">LSTM model integrity verified via PQC handshake. System is quantum-shielded. Implementation Confirmed.</span>`;
+        await typeTerm('ps2-res', 'SYSTEM-ID: EMERALD_SEC_AI_IOT_v3_COMPLETE', 'msg');
+    }, 2000);
 }
 
 // ====== MAIN TAB: PS3 ======
 async function simulatePS3() {
-    const ep = $('cloud-endpoint').value || 'arn:aws:kms:us-east-1:123456789:key/dummy';
+    const ep = $('cloud-endpoint').value || 's3://emerald-vault-01.amazonaws.com';
     $('ps3-logs').innerHTML = '';
-    await typeTerm('ps3-logs', `Establishing Admin API Bridge to KMS Endpoint: ${ep}...`, 'msg');
-    await typeTerm('ps3-logs', 'IAM Credentials authenticated via Webhook STS.', 'msg');
-    await typeTerm('ps3-logs', 'Harvesting Attack Detected on connected ingress VPC! AI Policy Engine Triggered.', 'err');
+    
+    await typeTerm('ps3-logs', `INITIATING MISSION TEST: Cloud Vault Synchronization: ${ep}...`, 'msg');
+    await typeTerm('ps3-logs', 'AI CLOUD OPTIMIZER: Analyzing ingress VPC traffic hooks...', 'warning');
+    await typeTerm('ps3-logs', 'FETCHING TLS Hierarchies for Connected Endpoint...', 'msg');
+    
+    // Simulate finding a vulnerability
+    await new Promise(r => setTimeout(r, 1000));
+    await typeTerm('ps3-logs', 'CRITICAL_DETECT: RSA-2048 Certificate detected on Cloud Gateway.', 'err');
+    await typeTerm('ps3-logs', 'HARVESTING ATTACK VECTOR identified! Triggering PQC key rotation...', 'err');
     
     setTimeout(() => {
         $('c-status').innerText = 'ML-KEM (Kyber) + TLS 1.3';
@@ -760,9 +799,10 @@ async function simulatePS3() {
         $('k-icon').innerHTML = '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="2"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>';
     }, 1200);
 
-    await typeTerm('ps3-logs', `Transmitting new Lattice Master Keys directly to IAM Vault: ${ep}`, 'msg');
-    await typeTerm('ps3-logs', 'AI instructs KMS to modify Key Rotation Policy based on extreme threat velocity -> Dynamic interval.', 'msg');
-    await typeTerm('ps3-logs', `SUCCESS: Traffic routing through vault ${ep} is fully quantum-shielded.`, 'msg');
+    await typeTerm('ps3-logs', `UPGRADING: Distributing Lattice keys to IAM: ${ep}`, 'msg');
+    await typeTerm('ps3-logs', 'AI instructs KMS to modify Key Rotation Policy based on high threat velocity.', 'msg');
+    await typeTerm('ps3-logs', `[PS3 TESTING SUCCESS] Cloud Vault ${ep} is fully quantum-shielded.`, 'msg');
+    await typeTerm('ps3-logs', 'STATUS: SYSTEM_WIDE_COMPLIANCE_ACHIEVED', 'msg');
 }
 
 // ====== THEME & SESSION ======

@@ -13,6 +13,28 @@ class CryptoDetector:
     
     # Cryptographic algorithm patterns and their quantum vulnerability
     CRYPTO_PATTERNS = {
+        # AI & Machine Learning Architectures (PS-2: AI-IoT Security)
+        'AI_SECURITY': {
+            'patterns': [
+                r'\bLSTM\b',
+                r'\bRNN\b',
+                r'\bCNN\b',
+                r'\bGRU\b',
+                r'\bDense\b',
+                r'\bConv2D\b',
+                r'Keras',
+                r'TensorFlow',
+                r'PyTorch',
+                r'scikit-learn',
+                r'model\.predict',
+                r'activation=',
+                r'optimizer='
+            ],
+            'quantum_vulnerable': False,
+            'attack': 'None (Integrity Shielding Required)',
+            'category': 'ai_pqc_integration'
+        },
+
         # Post-Quantum Cryptography (Quantum-Resistant)
         'ML-KEM': {
             'patterns': [r'ML-KEM', r'Kyber'],
