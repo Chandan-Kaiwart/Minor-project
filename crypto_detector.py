@@ -209,17 +209,11 @@ class CryptoDetector:
     KEY_SIZE_PATTERN = r'(?:key[_\s]?size|keysize|bits?)[:\s=]+(\d+)'
     
     def __init__(self):
-        self.findings = []
+        self.findings: List[Dict[str, Any]] = []
     
     def detect_crypto(self, file_info: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Detect cryptographic algorithms in a file
-        
-        Args:
-            file_info: File information dictionary from FileScanner
-        
-        Returns:
-            List of cryptographic findings
         """
         findings = []
         content = file_info.get('content')
@@ -227,28 +221,22 @@ class CryptoDetector:
         if not content:
             return findings
         
-        # Convert bytes to string if needed
         if isinstance(content, bytes):
             try:
                 content = content.decode('utf-8', errors='ignore')
-            except:
+            except Exception:
                 return findings
         
-        # Search for each cryptographic algorithm
         for algo_name, algo_info in self.CRYPTO_PATTERNS.items():
             for pattern in algo_info['patterns']:
                 matches = re.finditer(pattern, content, re.IGNORECASE)
                 
                 for match in matches:
-                    # Extract context around the match
                     start = max(0, match.start() - 100)
                     end = min(len(content), match.end() + 100)
                     context = content[start:end]
                     
-                    # Try to extract key size
                     key_size = self._extract_key_size(context)
-                    
-                    # Get line number
                     line_number = content[:match.start()].count('\n') + 1
                     
                     finding = {
@@ -267,9 +255,7 @@ class CryptoDetector:
                     
                     findings.append(finding)
         
-        # Remove duplicates (same algorithm, same file, similar line)
         findings = self._deduplicate_findings(findings)
-        
         return findings
     
     def _extract_key_size(self, context: str) -> Optional[int]:
@@ -278,10 +264,9 @@ class CryptoDetector:
         if match:
             try:
                 return int(match.group(1))
-            except:
+            except Exception:
                 pass
         
-        # Look for common key sizes in context
         common_sizes = [1024, 2048, 3072, 4096, 128, 192, 256, 384, 512]
         for size in common_sizes:
             if str(size) in context:
@@ -298,7 +283,7 @@ class CryptoDetector:
             key = (
                 finding['algorithm'],
                 finding['file'],
-                finding['line'] // 5  # Group nearby lines
+                finding['line'] // 5
             )
             
             if key not in seen:
@@ -308,31 +293,28 @@ class CryptoDetector:
         return unique_findings
     
     def get_statistics(self, findings: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Generate statistics from findings"""
-        stats = {
+        """Generate statistics from findings with type safety"""
+        total_vuln = 0
+        by_algo: Dict[str, int] = {}
+        by_cat: Dict[str, int] = {}
+        by_type: Dict[str, int] = {}
+        
+        for f in findings:
+            algo = str(f['algorithm'])
+            category = str(f['category'])
+            file_type = str(f.get('file_type', 'source_code'))
+            
+            if f['quantum_vulnerable']:
+                total_vuln += 1
+            
+            by_algo[algo] = by_algo.get(algo, 0) + 1
+            by_cat[category] = by_cat.get(category, 0) + 1
+            by_type[file_type] = by_type.get(file_type, 0) + 1
+        
+        return {
             'total_findings': len(findings),
-            'vulnerable_count': 0,
-            'by_algorithm': {},
-            'by_category': {},
-            'by_file_type': {}
+            'vulnerable_count': total_vuln,
+            'by_algorithm': by_algo,
+            'by_category': by_cat,
+            'by_file_type': by_type
         }
-        
-        for finding in findings:
-            algo = finding['algorithm']
-            category = finding['category']
-            file_type = finding.get('file_type', 'source_code')
-            
-            # Count vulnerabilities
-            if finding['quantum_vulnerable']:
-                stats['vulnerable_count'] += 1
-            
-            # Count by algorithm
-            stats['by_algorithm'][algo] = stats['by_algorithm'].get(algo, 0) + 1
-            
-            # Count by category
-            stats['by_category'][category] = stats['by_category'].get(category, 0) + 1
-            
-            # Count by file type
-            stats['by_file_type'][file_type] = stats['by_file_type'].get(file_type, 0) + 1
-        
-        return stats
