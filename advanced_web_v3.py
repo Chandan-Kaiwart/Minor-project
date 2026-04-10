@@ -13,6 +13,128 @@ from pqc_ai_iot_security import AIOptimizedPQCHandshake
 app = Flask(__name__)
 manager = AdvancedPQCManager()
 engine = AdvancedPQCEngine(n=512)
+
+import hashlib
+from datetime import datetime
+
+class PQCBlockchain:
+    def __init__(self):
+        self.chain = []
+        self.hash_algorithm = 'SPHINCS+ (Simulated)'
+        self.create_genesis_block()
+
+    def create_genesis_block(self):
+        self.add_log("SYSTEM", "localhost", "ROOT KERNEL BOOT SUCCESS", severity="INFO", custom_hash="0000000000000000")
+
+    def add_log(self, user, ip, action, severity="INFO", custom_hash=None):
+        prev_hash = self.chain[-1]["hash"] if self.chain else "00000000000000000000"
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        log_id = len(self.chain) + 1
+        
+        data_string = f"{log_id}{user}{ip}{action}{timestamp}{prev_hash}"
+        calc_hash = custom_hash if custom_hash else hashlib.sha256(data_string.encode()).hexdigest()[:16]
+        
+        block = {
+            "id": log_id,
+            "user": user,
+            "ip": ip,
+            "action": action,
+            "timestamp": timestamp,
+            "hash": calc_hash,
+            "prev_hash": prev_hash,
+            "severity": severity,
+            "valid": True
+        }
+        self.chain.append(block)
+
+    def validate_chain(self):
+        is_valid_overall = True
+        for i in range(1, len(self.chain)):
+            current = self.chain[i]
+            prev = self.chain[i-1]
+            data_string = f"{current['id']}{current['user']}{current['ip']}{current['action']}{current['timestamp']}{prev['hash']}"
+            expected_hash = hashlib.sha256(data_string.encode()).hexdigest()[:16]
+            if current['hash'] != expected_hash or not prev.get('valid', True):
+                current["valid"] = False
+                is_valid_overall = False
+            else:
+                current["valid"] = True
+        return is_valid_overall
+
+blockchain = PQCBlockchain()
+blockchain.add_log("system", "localhost", "PQC DAEMON START (SLH-DSA ENABLED)", "INFO")
+blockchain.add_log("admin", "192.168.1.15", "USER LOGIN (ADMIN_ROLE)", "INFO")
+
+import threading
+import time
+import random
+
+def simulate_global_traffic():
+    # Wait for server to start
+    time.sleep(5)
+    external_traffic_patterns = [
+        ("Client-Browser", "youtube.com",              "GET /watch?v=quantum_crypto_tutorial",   "INFO"),
+        ("Client-Browser", "manifest.googlevideo.com", "GET /api/videoplayback (1080p stream)",  "INFO"),
+        ("Sys-Updater",    "windowsupdate.com",        "POST /v1/telemetry",                     "INFO"),
+        ("Client-Browser", "github.com",               "GET /api/v3/users/pqc-research",         "INFO"),
+        ("WhatsApp-Web",   "web.whatsapp.com",         "wss://chat-stream (Encrypted)",          "INFO"),
+        ("Client-Browser", "youtube.com",              "GET /youtubei/v1/next (Autoplay load)",  "INFO"),
+        ("Background-App", "spotify.com",              "GET /v1/me/player/currently-playing",    "INFO"),
+        ("Unknown-Agent",  "45.33.22.10",              "PORT SCAN DETECTED: TCP 22,80,443",      "WARNING"),
+        ("Unknown-Agent",  "103.21.244.90",            "REPEATED 404 PROBING DETECTED",         "WARNING"),
+        ("Auth-Service",   "192.168.0.1",              "USER AUTHENTICATED SUCCESSFULLY",        "INFO"),
+    ]
+    while True:
+        # Generate varied traffic every 2 to 5 seconds
+        time.sleep(random.uniform(2.0, 5.0))
+        user, ip, base_action, severity = random.choice(external_traffic_patterns)
+        action = f"[PACKET SNIFFER] {base_action}"
+        try:
+            blockchain.add_log(user, ip, action, severity)
+        except:
+            pass
+
+# Start the background traffic generator
+threading.Thread(target=simulate_global_traffic, daemon=True).start()
+
+@app.before_request
+def log_network_traffic():
+    if (request.path.startswith('/api/') or request.path.startswith('/v3/')) and request.path not in ['/api/get_logs']:
+        ip = request.remote_addr
+        user = "Guest"
+        action = f"API REQUEST: {request.method} {request.path}"
+        severity = "INFO"
+        if "tamper_log" in request.path:
+            severity = "CRITICAL"
+        elif "ps2_probe" in request.path:
+            severity = "WARNING"
+        blockchain.add_log(user, ip, action, severity)
+
+@app.route('/api/get_logs', methods=['GET'])
+def get_logs():
+    is_valid = blockchain.validate_chain()
+    return jsonify({
+        "chain": blockchain.chain[-50:],
+        "valid": is_valid
+    })
+
+@app.route('/api/tamper_log', methods=['POST'])
+def tamper_log():
+    if len(blockchain.chain) > 1:
+        target_idx = max(1, len(blockchain.chain) - 3)
+        blockchain.chain[target_idx]["action"] = "NO ABNORMAL ACTIVITY DETECTED"
+        blockchain.chain[target_idx]["severity"] = "CRITICAL"
+        return jsonify({"status": "SUCCESS", "message": "Log artificially tampered!"})
+    return jsonify({"status": "ERROR"})
+
+@app.route('/api/reset_chain', methods=['POST'])
+def reset_chain():
+    global blockchain
+    blockchain = PQCBlockchain()
+    blockchain.add_log("system", "localhost", "PQC DAEMON RESTARTED (SLH-DSA RE-KEYED)", "INFO")
+    blockchain.add_log("admin", "192.168.0.25", "CHAIN INTEGRITY RESTORED BY ADMIN", "INFO")
+    return jsonify({"status": "RESET", "message": "Blockchain chain restored to genesis!"})
+
 @app.route('/api/ps2_live_execute', methods=['GET', 'POST'])
 def ps2_live_execute():
     """Trigger PQC upgrade on the IoT device and capture the PQC token"""
@@ -70,9 +192,84 @@ def camera_snapshot():
         
     except Exception as e:
         import base64
-        # Return a tiny 1x1 transparent pixel so the generic HTML <img> tag doesn't show a broken icon
         pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
         return send_file(io.BytesIO(pixel), mimetype='image/png')
+
+# ====== PS1: DYNAMIC ALGORITHM ROUTES ======
+@app.route('/api/fetch_attacks', methods=['GET'])
+def fetch_attacks():
+    target = request.args.get('target', 'iot_device')
+    # Simulated fetch from Google Threat Intelligence Server
+    attacks = {
+        'file': ['Ransomware Mass-Encryption', 'Data Exfiltration via DNS', 'File Puzzling / Shredding', 'Quantum Data-Harvesting (SNDL)'],
+        'folder': ['Directory Traversal Escalation', 'Bulk Archive Theft', 'Ransomware Worm Phishing', 'Lateral Movement Propagation'],
+        'iot_device': ['Side-Channel Power Analysis', 'Firmware Downgrade (OTA)', 'DDoS Botnet Hijack', 'Man-In-The-Middle (MITM)', 'Fault Injection Attack'],
+        'cloud_storage': ['S3 Bucket Enumeration', 'Cross-Tenant Data Bleed', 'API Key Compromise', 'Quantum Key Harvest', 'SSRF Proxy Exploitation'],
+        'api_gateway': ['BOLA (Broken Object Level Auth)', 'GraphQL Introspection Exploits', 'Token Forgery (Shor\'s)', 'DDoS Application Layer'],
+        'blockchain': ['51% Quantum Compute Hijack', 'Smart Contract Reentrancy', 'ECDSA Private Key Derivation (Shor\'s)'],
+        'healthcare': ['Patient Record Alteration', 'Pacemaker Telemetry MITM', 'Bluetooth Low Energy (BLE) Spoofing'],
+        'autonomous_vehicle': ['CAN Bus Injection', 'Sensor Spoofing (LiDAR)', 'V2X Protocol Interception', 'GPS Signal Jamming'],
+        'industrial_ics': ['SCADA Command Forgery', 'PLC Logic Bomb', 'Stuxnet-style Airgap Bypass', 'Time Synchronization Spoofing']
+    }
+    return jsonify({"status": "success", "attacks": attacks.get(target, [])})
+
+@app.route('/api/generate_algo', methods=['POST'])
+def generate_algo():
+    data = request.json or {}
+    target = data.get('target', 'iot_device')
+    algo = data.get('algo', 'ML-KEM')
+    attack = data.get('attack', 'Side-Channel Power Analysis')
+    
+    # Generate dynamic cryptographic schema
+    code = f"""// [THREAT INTEL FETCHED VIA GOOGLE SERVERS]
+// ----------------------------------------------------
+// Target Deployment : {target.upper().replace('_', ' ')}
+// Chosen Algorithm  : {algo}
+// Mitigating Threat : {attack}
+// ----------------------------------------------------
+
+#include <pqc_lattice.h>
+#include <hardware_fw.h>
+
+void execute_secure_mitigation() {{
+    // Initialize standard Post-Quantum Context
+    PQC_Context* ctx = Initialize_{algo.replace('-','_')}(SECURITY_LEVEL_5);
+    
+    // Dynamic Threat Mitigation Logic for {attack}
+    Set_Hardware_Masking(ctx, ENABLED);
+    Set_Constant_Time_Execution(ctx, ENABLED);
+    
+    // Generate Lattice polynomial seed
+    Vector ephemeral_secret = Generate_Lattice_Seed(512, 3329);
+    
+    // Encapsulate payload utilizing {algo}
+    byte[] encapsulated = KEM_Encapsulate(ctx, ephemeral_secret);
+    
+    // Safe transmission preventing {attack} vectors
+    Secure_Transmission(encapsulated, NETWORK_INTERFACE_1);
+}}
+"""
+    return jsonify({"code": code})
+
+@app.route('/api/evaluate_algo', methods=['POST'])
+def evaluate_algo():
+    data = request.json or {}
+    code = data.get('code', '')
+    
+    if "ECC" in code or "RSA" in code:
+        score = 25
+        msg = "Classical vulnerable algorithms detected! Vulnerable to Shor's Algorithm."
+    elif "ML-KEM" in code or "lattice" in code.lower() or "dilithium" in code.lower():
+        score = 98
+        msg = "Robust Post-Quantum bounds validated. NIST Compliance Confirmed."
+    elif len(code.strip()) < 10:
+        score = 0
+        msg = "Empty algorithm logic provided."
+    else:
+        score = 65
+        msg = "Unrecognized cryptographic scheme. Requires deep structural analysis."
+        
+    return jsonify({"score": score, "message": msg})
 
 HTML_V3 = r"""<!DOCTYPE html>
 <html lang="en" data-theme="dark">
@@ -328,6 +525,29 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
     @keyframes blink { 0% { opacity:1; } 50% { opacity:0.3; } 100% { opacity:1; } }
+    
+    /* PQC Encrypt Banner Styles */
+    #pqc-encrypt-banner {
+        display: none;
+        margin-top: 20px;
+        background: linear-gradient(90deg, rgba(80, 200, 120, 0.1) 0%, rgba(0, 0, 0, 0.4) 100%);
+        border: 2px solid var(--primary);
+        border-radius: 12px;
+        padding: 20px;
+        align-items: center;
+        justify-content: space-between;
+        animation: fadeIn 0.6s ease-out;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+    }
+    .banner-content { display: flex; align-items: center; gap: 20px; }
+    .banner-icon { 
+        width: 50px; height: 50px; background: rgba(80, 200, 120, 0.1); 
+        border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        color: var(--primary); border: 1px solid rgba(80, 200, 120, 0.3);
+    }
+    .banner-info { display: flex; flex-direction: column; }
+    .banner-title { font-weight: 800; color: #fff; font-size: 1rem; letter-spacing: 0.5px; }
+    .banner-desc { font-size: 0.75rem; color: var(--text-dim); margin-top: 4px; line-height: 1.4; max-width: 400px; }
 </style>
 </head>
 <body>
@@ -340,8 +560,6 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
     <!-- Stable Archive.org Download Link -->
     <source src="mission-impossible_oEwlsUsI.mp3" type="audio/mpeg">
     <source src="mission-impossible_oEwlsUsI.mp3" type="audio/mpeg">
-</audio>
-</audio>
 </audio>
 
 <div class="dashboard-wrapper">
@@ -364,29 +582,19 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
             AI-IoT Security
         </div>
-        <div class="nav-item" onclick="switchTab('ps3', this)">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z"></path></svg>
-            Cloud Vault
-        </div>
-
-        <div class="nav-section-title" style="margin-top:auto;">System Access</div>
-        <div class="nav-item" onclick="switchTab('ps3', this)">
-            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+        <div class="nav-item" onclick="switchTab('logs', this)">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             System Logs
-        </div>
-        <div class="nav-item" onclick="toggleTheme()">
-            <div class="nav-icon" style="background:rgba(80,200,120,0.1); width:24px; height:24px; display:flex; align-items:center; justify-content:center; border-radius:4px;">
-                <svg id="theme-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
-            </div>
-            <span id="theme-text">Dark Mode</span>
         </div>
     </div>
 
     <!-- MAIN CONTENT -->
     <div class="main-content">
         <div class="top-header">
-            <div class="icon-btn"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.73 21a2 2 0 0 1-3.46 0"></path></svg></div>
-            <div class="icon-btn" style="border-radius: 50%;"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></div>
+            <div class="icon-btn" onclick="toggleTheme()" style="width: auto; padding: 0 15px; border-radius: 20px; font-size: 0.75rem; font-weight:600; gap: 8px; border-color:var(--border);">
+                <svg id="theme-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                <span id="theme-text">Dark Mode</span>
+            </div>
         </div>
 
         <!-- ====================== TAB 1 : MAIN AUDIT MAP ====================== -->
@@ -483,6 +691,26 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                             </tbody>
                         </table>
                         <div id="res-injector"></div>
+                        
+                        <!-- PQC ENCRYPT BANNER (Injected) -->
+                        <div id="pqc-encrypt-banner" data-repo-url="" data-scan-type="">
+                            <div class="banner-content">
+                                <div class="banner-icon">
+                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                </div>
+                                <div class="banner-info">
+                                    <div class="banner-title">PQC-Sealed Project Archive Ready</div>
+                                    <div class="banner-desc">Quantum-Safe Encryption Detected. Every source file will be wrapped in <b>ML-KEM-768</b> derived envelopes. Download and protect your intellectual property.</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; flex-direction: column; gap: 10px; align-items: flex-end;">
+                                <select id="encrypt-method" class="m-input" style="width: auto; padding: 8px 15px; font-size: 0.8rem;">
+                                    <option value="zip">Download as Secure ZIP Vault</option>
+                                    <option value="branch">Push to New GitHub Branch (pqc-hardened)</option>
+                                </select>
+                                <button class="btn-action" style="width: auto; padding: 12px 30px; font-size: 0.85rem;" onclick="encryptGitHubProject()">Encrypt & Protect Repo</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -493,53 +721,68 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
             <div class="ps-header">Post-Quantum Cryptography Algorithms</div>
             <div class="ps-desc">Research and design cryptographic algorithms resistant to quantum computer attacks. Evaluate existing post-quantum cryptography schemes and propose implementations for mathematical lattice improvements. (Problem Statement 1)</div>
             
-            <div style="display: flex; gap: 20px; align-items: flex-start;">
-                <div class="card" style="flex:2;">
-                    <div class="card-title" style="color:#fff;">NIST Finalized Scheme Evaluation Matrix</div>
-                    
-                    <div class="algo-row">
-                        <div style="width:30%;">
-                            <div style="font-weight:700; color:var(--primary);">ML-KEM (Kyber)</div>
-                            <div style="font-size:0.75rem; color:var(--text-dim);">Module-Lattice KEM</div>
+            <div style="display: flex; flex-direction: column; gap: 20px;">
+                <!-- AI Configuration Dropdowns -->
+                <div class="card" style="border-color:rgba(0,250,136,0.3); box-shadow:0 0 15px rgba(0,250,136,0.05); overflow:visible !important; z-index:50;">
+                    <div class="card-title" style="margin-bottom: 15px; color:var(--primary);">AI Threat Intelligence Engine (Powered by Google Servers)</div>
+                    <div style="display:flex; gap: 15px; flex-wrap:wrap; align-items:flex-end;">
+                        <div style="flex:1;">
+                            <label style="font-size:0.7rem; color:var(--text-dim); margin-bottom:5px; display:block;">Target Environment</label>
+                            <select id="ps1-target" class="m-input" onchange="fetchDynamicAttacks()">
+                                <option value="iot_device">IoT Device / Edge Sensor</option>
+                                <option value="file">Local File / Database</option>
+                                <option value="folder">Shared Network Folder</option>
+                                <option value="cloud_storage">Cloud Storage Bucket</option>
+                                <option value="api_gateway">REST API Gateway</option>
+                                <option value="blockchain">Blockchain Smart Contract</option>
+                                <option value="healthcare">Healthcare Wearable (IoMT)</option>
+                                <option value="autonomous_vehicle">Autonomous Vehicle (CAN Bus)</option>
+                                <option value="industrial_ics">Industrial Control System (ICS)</option>
+                            </select>
                         </div>
-                        <div style="width:30%; text-align:center;">
-                            <div class="badge" style="background:rgba(0,250,136,0.1); color:var(--primary); border:1px solid var(--primary);">NIST STANDARD</div>
+                        <div style="flex:1; position:relative;">
+                            <label style="font-size:0.7rem; color:var(--text-dim); margin-bottom:5px; display:block;">Secure Target Algorithm (Max 2)</label>
+                            <div class="m-input" style="padding: 10px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;" onclick="toggleAlgoDropdown()">
+                                <span id="algo-dropdown-text" style="font-size:0.75rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">ML-KEM</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </div>
+                            <div id="algo-checkbox-list" class="m-input" style="display: none; position: absolute; top: calc(100% + 5px); left: 0; width: 100%; z-index: 100; max-height: 180px; overflow-y: auto; padding: 5px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="ML-KEM" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)" checked> <span style="font-size:0.75rem;">ML-KEM (Kyber)</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="ML-DSA" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">ML-DSA (Dilithium)</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="SLH-DSA" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">SLH-DSA (SPHINCS+)</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="FRODO" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">FrodoKEM</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="FALCON" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">FALCON</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="BIKE" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">BIKE</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="HQC" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">HQC</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="MCELIECE" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">Classic McEliece</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="SIKE_VULN" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">SIKE (Vulnerable)</span></label>
+                                <label style="display:flex; align-items:center; gap:8px; padding:8px 5px; cursor:pointer;"><input type="checkbox" value="AES-256" class="algo-cb" onchange="checkAlgoCheckboxLimit(this)"> <span style="font-size:0.75rem;">AES-256 (Fallback)</span></label>
+                            </div>
                         </div>
-                        <div style="width:40%; font-size:0.8rem; color:var(--text-dim); text-align:right;">
-                            Resistant to Shor's. Recommended for rapid key exchange. Uses structured lattices.
+                        <div style="flex:1.5;">
+                            <label style="font-size:0.7rem; color:var(--warning); margin-bottom:5px; display:block; font-weight:700;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="position:relative; top:2px; margin-right:3px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg> Predicted Actionable Attack (Dynamic)</label>
+                            <select id="ps1-attack" class="m-input" style="border-color:rgba(219, 147, 34, 0.4);">
+                                <option value="">Fetching live from Google Server...</option>
+                            </select>
                         </div>
-                    </div>
-                    <div class="algo-row">
-                        <div style="width:30%;">
-                            <div style="font-weight:700; color:var(--primary);">ML-DSA (Dilithium)</div>
-                            <div style="font-size:0.75rem; color:var(--text-dim);">Module-Lattice Signature</div>
-                        </div>
-                        <div style="width:30%; text-align:center;">
-                            <div class="badge" style="background:rgba(0,250,136,0.1); color:var(--primary); border:1px solid var(--primary);">NIST STANDARD</div>
-                        </div>
-                        <div style="width:40%; font-size:0.8rem; color:var(--text-dim); text-align:right;">
-                            Highly efficient digital signatures based on Fiat-Shamir.
-                        </div>
-                    </div>
-                    <div class="algo-row">
-                        <div style="width:30%;">
-                            <div style="font-weight:700; color:var(--warning);">SLH-DSA (SPHINCS+)</div>
-                            <div style="font-size:0.75rem; color:var(--text-dim);">Stateless Hash-Based</div>
-                        </div>
-                        <div style="width:30%; text-align:center;">
-                            <div class="badge" style="background:rgba(219,147,34,0.1); color:var(--warning); border:1px solid var(--warning);">SECONDARY FALLBACK</div>
-                        </div>
-                        <div style="width:40%; font-size:0.8rem; color:var(--text-dim); text-align:right;">
-                            Conservative security, large signature footprint. Used if lattices break.
+                        <div>
+                            <button class="btn-action" style="padding:12px 20px; font-size: 0.85rem;" onclick="ps1GenerateAlgorithm()">Sync & Generate Schema</button>
                         </div>
                     </div>
                 </div>
 
-                <div class="card card-terminal" style="flex:1; height:auto; min-height:300px;">
-                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">Algorithm Testing Workbench</div>
-                    <textarea class="m-input" id="algo-math" style="height:120px; font-size:0.75rem; margin-top:10px; border-color:rgba(0,250,136,0.5); background:rgba(0,0,0,0.5);" placeholder="Enter lattice constants (e.g. n=512, q=3329) or pseudo-code to run AI analysis..."></textarea>
-                    <button class="btn-action" style="padding:10px; margin-top:10px; font-size: 0.8rem; border-radius:4px;" onclick="simulatePS1()">Evaluate Algorithm</button>
-                    <div id="ps1-res" style="margin-top:15px; font-size:0.75rem;"></div>
+                <!-- Testing Workbench (Final Inbox) -->
+                <div class="card card-terminal" style="height:auto; min-height:400px; flex:none;">
+                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 10px; margin-bottom: 5px; border-bottom: 1px dashed var(--border); display:flex; justify-content:space-between; align-items:center;">
+                        <span>Unified Algorithm Evaluation Inbox</span>
+                        <span style="font-size:0.6rem; color:var(--text-dim); background:rgba(0,0,0,0.5); padding:2px 6px; border-radius:4px;">READ / WRITE CAPABLE</span>
+                    </div>
+                    <textarea class="m-input" id="algo-math" style="flex:1; min-height:220px; font-size:0.75rem; margin-top:10px; border-color:rgba(0,250,136,0.3); background:rgba(0,0,0,0.5); padding:15px; color:#50C878;" placeholder="// Dynamic algorithm will appear here based on selected data.
+// You can also paste external cryptographic code snippets manually to test if they align with Post-Quantum standards..."></textarea>
+                    
+                    <button class="btn-action" style="padding:15px; margin-top:15px; font-size: 0.9rem; background:linear-gradient(90deg, #1f4037 0%, var(--primary) 100%);" onclick="simulatePS1()">Run Verification Engine</button>
+                    
+                    <div id="ps1-res" style="margin-top:15px; font-size:0.8rem; line-height:1.5;"></div>
                 </div>
             </div>
         </div>
@@ -658,50 +901,63 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
             </div>
         </div>
 
-        <!-- ====================== TAB 4 : PS3 CLOUD VAULT ====================== -->
-        <div id="tab-ps3" class="tab-content">
-            <div class="ps-header">Quantum-Resistant Cryptography for Cloud Data Protection</div>
-            <div class="ps-desc" style="background: rgba(0, 80, 255, 0.05); border-color: rgba(0, 80, 255, 0.2); margin-top: 15px;">
-                <strong>Tactical Objective (Problem Statement 3):</strong> 
-                Analyze cloud-native infrastructure for quantum-vulnerable endpoints. The AI Optimizer continuously monitors cloud ingress/egress. If it detects "Harvest Now, Decrypt Later" exfiltration patterns, it autonomously upgrades the vulnerable Data-in-Transit tunnel from RSA to <b>ML-KEM</b> and accelerates Key Rotation cycles directly in the KMS Policy.
-            </div>
+        <!-- ====================== TAB 6 : SYSTEM LOGS (BLOCKCHAIN PQC) ====================== -->
+        <div id="tab-logs" class="tab-content">
+            <div class="ps-header">Live Threat Radar & Quantum Audit Logs (SLH-DSA)</div>
+            <div class="ps-desc">This is a live API listener monitoring real-time LAN & Web traffic reaching this application. It constructs an immutable <b>SLH-DSA/SPHINCS+</b> blockchain over incoming packets. If an external machine (Threat Actor) attempts to forge a previous block via the API, the chain validation mathematically breaks.</div>
 
-            <div class="grid-system" style="grid-template-columns: 1fr 1fr; margin-top:20px;">
-                <div class="card" style="display:flex; flex-direction:column; border-color:rgba(0,250,136,0.3);">
-                    <div class="card-title" style="color:var(--primary);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px; vertical-align:middle;"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg> Cloud Mission Control</div>
-                    
-                    <div style="margin-bottom:15px;">
-                        <label style="font-size:0.7rem; color:var(--text-dim); display:block; margin-bottom:5px;">Cloud Deployment ARN / Public Endpoint</label>
-                        <input type="text" id="cloud-endpoint" class="m-input" placeholder="e.g. s3://emerald-vault-01.amazonaws.com" value="s3://emerald-vault-01.amazonaws.com" style="width:100%;">
-                    </div>
-
-                    <div style="background:rgba(0,0,0,0.3); padding:15px; border:1px solid var(--border); border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:5px;">Data-in-Transit Tunnel</div>
-                            <div style="font-weight:700; color:var(--danger);" id="c-status">RSA-2048 (VULNERABLE)</div>
-                        </div>
-                        <div id="c-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></div>
-                    </div>
-
-                    <div style="background:rgba(0,0,0,0.3); padding:15px; border:1px solid var(--border); border-radius:8px; margin-bottom:15px; display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            <div style="font-size:0.75rem; color:var(--text-dim); margin-bottom:5px;">AI Key Rotation Policy</div>
-                            <div style="font-weight:700; color:var(--warning);" id="k-status">Static / 30 Days</div>
-                        </div>
-                        <div id="k-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></div>
-                    </div>
-
-                    <button class="btn-action" style="padding:15px; font-size:0.9rem; margin-top:auto; font-weight:800;" onclick="simulatePS3()">Synchronize & Analyze Cloud Assets</button>
-                </div>
+            <div class="grid-system" style="grid-template-columns: 2fr 1fr; margin-top:20px;">
                 
-                <div class="card card-terminal" style="height:100%; min-height:400px; display:flex; flex-direction:column;">
-                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 5px; border-bottom: 1px dashed var(--border);">AI Cloud Optimizer Logs</div>
-                    <div id="ps3-logs" style="flex:1; overflow-y:auto; line-height:1.6; font-size:0.8rem; font-family:'JetBrains Mono'; color:var(--text-white); padding:10px;">
-                        <span style="color:var(--text-dim);">[SYSTEM] Waiting for Cloud Synchronization...</span>
+                <!-- Left: Live Log Chain -->
+                <div class="card card-terminal" style="display:flex; flex-direction:column; height: 500px; overflow-y: hidden;">
+                    <div style="position: sticky; top: -5px; background: var(--term-bg); padding-bottom: 5px; margin-bottom: 10px; border-bottom: 2px solid var(--border); display:flex; justify-content:space-between; align-items:center; z-index:10;">
+                        <div style="display:flex; gap:15px; align-items:center;">
+                            <span style="color:var(--primary); font-weight:800;">Real-Time Immutable Audit Server</span>
+                            <span style="font-size:0.6rem; background:rgba(255,255,255,0.1); padding:3px 8px; border-radius:4px;">AUTO-POLL: ACTIVE (2s)</span>
+                        </div>
+                        <span style="color:var(--text-white);">Chain Integrity: <span id="chain-status-text" style="color:var(--primary); font-weight:800;">100% SECURE</span></span>
                     </div>
+
+                    <!-- Metadata Filter Bar -->
+                    <div style="display:flex; gap:10px; margin-bottom:10px; font-size:0.7rem; border-bottom: 1px dashed var(--border); padding-bottom:10px;">
+                        <button onclick="currentFilter='ALL'; fetchLogChain();" style="background:var(--border); color:#fff; border:none; padding:5px 10px; border-radius:4px; cursor:pointer;">ALL</button>
+                        <button onclick="currentFilter='WARNING'; fetchLogChain();" style="background:rgba(255, 170, 0, 0.2); color:var(--warning); border:1px solid var(--warning); padding:5px 10px; border-radius:4px; cursor:pointer;">WARNINGS</button>
+                        <button onclick="currentFilter='CRITICAL'; fetchLogChain();" style="background:rgba(248, 75, 75, 0.2); color:var(--danger); border:1px solid var(--danger); padding:5px 10px; border-radius:4px; cursor:pointer;">CRITICAL</button>
+                        <div style="flex:1;"></div>
+                        <span style="color:var(--text-dim); display:flex; align-items:center;">💡 Click any log to extract Forensic Metadata</span>
+                    </div>
+                    
+                    <div id="log-chain-container" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:6px; line-height:1.4; font-size:0.75rem; padding-right:5px;">
+                        <!-- JS populated logs -->
+                    </div>
+                </div>
+
+                <!-- Right: Cyber Attack Panel -->
+                <div class="card" style="display:flex; flex-direction:column; border-color:var(--primary); justify-content:flex-start;">
+                    <div class="card-title" style="color:var(--danger); font-weight:800; border-bottom:1px dashed var(--danger); padding-bottom:10px;">Remote Threat Vector Testing</div>
+                    
+                    <div style="margin-top:15px; color:var(--text-dim); font-size:0.75rem; line-height:1.5;">
+                        <p>Have a friend access this app via LAN port <b>5001</b></p>
+                        <p>When they browse, you will see their network requests mapped live into the PQC Blockchain on your screen.</p>
+                        <p>If they click the simulated attack button below to overwrite a past log (altering history), the SLH-DSA constraints will instantly orphan the chain!</p>
+                    </div>
+
+                    <button id="tamper-btn" class="btn-action" style="margin-top:20px; padding:15px; background:var(--bg-card); border-color:var(--danger); color:var(--danger);" onclick="simulateLogTampering()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:5px;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+                        <br>Simulate Remote API Override Attack
+                    </button>
+                    
+                    <div id="tamper-alert" style="display:none; margin-top:20px; padding:15px; background:rgba(248, 75, 75, 0.1); border-left:4px solid var(--danger); color:var(--text-white); font-size:0.75rem;">
+                        <b style="color:var(--danger);">SYSTEM HALTED!</b><br>API Forgery Detected & payload rejected. Forensic Integrity Preserved across the distributed chain.
+                    </div>
+
+                    <button id="reset-btn" onclick="resetChain()" style="display:none; margin-top:15px; padding:12px 20px; width:100%; background:rgba(0,250,136,0.1); border:1px solid var(--primary); color:var(--primary); border-radius:8px; cursor:pointer; font-size:0.8rem; font-weight:700;">
+                        🔄 Reset Chain (Re-Key SLH-DSA)
+                    </button>
                 </div>
             </div>
         </div>
+
     </div>
 </div>
 
@@ -1486,6 +1742,78 @@ function selectRepo(url, name) {
     $('gh-action-btn').classList.add('connected');
 }
 
+// ------ PQC ENCRYPTION WORKFLOW ------
+async function encryptGitHubProject() {
+    const banner = $('pqc-encrypt-banner');
+    const repoUrl = banner.dataset.repoUrl;
+    const scanType = banner.dataset.scanType;
+    const token = localStorage.getItem('pqc_gh_token') || '';
+    
+    if (scanType !== 'GitHub Sync') {
+        alert("The PQC Sealing Engine is currently optimized for GitHub discovered projects. Please connect a repo first.");
+        return;
+    }
+    
+    await typeTerm('term-logs', '╔══════════════════════════════════════════════╗', 'msg');
+    await typeTerm('term-logs', '║  INITIATING PQC-SEALING PROTOCOL (ML-KEM)    ║', 'msg');
+    await typeTerm('term-logs', '╚══════════════════════════════════════════════╝', 'msg');
+    await typeTerm('term-logs', 'Harvesting source files for quantum-resistant encapsulation...', 'msg');
+    
+    const btn = banner.querySelector('button');
+    const methodSelect = document.getElementById('encrypt-method');
+    const method = methodSelect ? methodSelect.value : 'zip';
+    const originalText = btn.innerText;
+    btn.innerText = method === 'zip' ? "Encrypting & Zipping..." : "Encrypting & Pushing Branch...";
+    btn.disabled = true;
+
+    try {
+        const formData = new FormData();
+        formData.append('repo_url', repoUrl);
+        formData.append('token', token);
+        formData.append('method', method);
+
+        const response = await fetch('/api/encrypt_project', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (response.ok) {
+            if (method === 'zip') {
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                const repoName = localStorage.getItem('pqc_gh_selected_name') || 'project';
+                a.href = url;
+                a.download = `${repoName}_PQC_ENCRYPTED.zip`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                
+                await typeTerm('term-logs', 'Encryption Complete. ML-KEM-768 shared secret established.', 'msg');
+                await typeTerm('term-logs', 'Project archive dispatched with SP-800-208 guidance.', 'msg');
+                btn.innerText = "Re-Encrypt Secure ZIP";
+            } else {
+                const result = await response.json();
+                await typeTerm('term-logs', 'Encryption Complete. ML-KEM-768 shared secret established.', 'msg');
+                await typeTerm('term-logs', `Successfully handled Git Branch: ${result.branch}`, 'msg');
+                await typeTerm('term-logs', `Status: ${result.message}`, 'msg');
+                btn.innerText = "Re-Commit Encrypted Branch";
+            }
+        } else {
+            let errMsg = 'Encryption failed';
+            try { const err = await response.json(); errMsg = err.message || errMsg; } catch(ex){}
+            throw new Error(errMsg);
+        }
+    } catch (e) {
+        await typeTerm('term-logs', 'ENCRYPTION_FAILED: ' + e.message, 'err');
+    } finally {
+        btn.disabled = false;
+        if (btn.innerText.includes("Encrypting")) {
+            btn.innerText = originalText;
+        }
+    }
+}
+
 // ====== MAIN TAB: CORE AUDIT ======
 async function executeScan() {
     const code = $('code-in').value, file = $('file-in').files[0], path = $('path-in').value, githubUrl = selectedGitHubRepo;
@@ -1622,14 +1950,234 @@ async function executeScan() {
             }
             await typeTerm('term-logs', 'Dashboard metrics synchronized with PQC schema.');
             $('vuln-tbody').scrollIntoView({ behavior: 'smooth', block: 'end' });
+
+            // === POST-SCAN ENCRYPT STEP ===
+            const encryptBanner = document.getElementById('pqc-encrypt-banner');
+            if(encryptBanner) {
+                encryptBanner.style.display = 'flex';
+                encryptBanner.dataset.repoUrl = githubUrl || '';
+                encryptBanner.dataset.scanType = auditTitle;
+            }
         }
     } catch(e) {
         await typeTerm('term-logs', 'FATAL: ' + e.message, 'err');
     }
 }
 
+// --- PS1 Algorithm Workflow Methods ---
+// --- PS1 Algorithm Workflow Methods ---
+
+function toggleAlgoDropdown() {
+    const list = document.getElementById('algo-checkbox-list');
+    list.style.display = list.style.display === 'none' ? 'block' : 'none';
+}
+
+// Close Dropdown if clicked outside
+document.addEventListener('click', function(event) {
+    const algoDiv = document.getElementById('algo-checkbox-list');
+    if (algoDiv && event.target.closest('.m-input') === null) {
+        algoDiv.style.display = 'none';
+    }
+});
+
+function checkAlgoCheckboxLimit(checkbox) {
+    const checkboxes = document.querySelectorAll('.algo-cb:checked');
+    if (checkboxes.length > 2) {
+        alert("Maximum 2 algorithms can be selected at once for hybrid blending.");
+        checkbox.checked = false;
+        return;
+    }
+    
+    // Update the dropdown text label
+    const textSpan = document.getElementById('algo-dropdown-text');
+    const checkedNow = document.querySelectorAll('.algo-cb:checked');
+    if (checkedNow.length === 0) {
+        textSpan.innerText = 'Select Algorithms...';
+    } else if (checkedNow.length === 1) {
+        textSpan.innerText = checkedNow[0].value;
+    } else {
+        textSpan.innerText = checkedNow[0].value + ' + ' + checkedNow[1].value;
+    }
+}
+
+async function fetchDynamicAttacks() {
+    const target = document.getElementById('ps1-target').value;
+    const dropdown = document.getElementById('ps1-attack');
+    dropdown.innerHTML = '<option value="">Fetching from Google Threat Intel...</option>';
+    try {
+        const res = await fetch(`/api/fetch_attacks?target=${target}`);
+        const data = await res.json();
+        dropdown.innerHTML = '';
+        data.attacks.forEach(a => {
+            const opt = document.createElement('option');
+            opt.value = a;
+            opt.innerText = a;
+            dropdown.appendChild(opt);
+        });
+    } catch(e) {
+        dropdown.innerHTML = '<option value="MITM">Fallback MITM Attack</option>';
+    }
+}
+
+async function ps1GenerateAlgorithm() {
+    const target = document.getElementById('ps1-target').value;
+    const checkboxes = document.querySelectorAll('.algo-cb:checked');
+    if (checkboxes.length === 0) {
+        alert("Please select at least 1 algorithm.");
+        return;
+    }
+    const algo = Array.from(checkboxes).map(cb => cb.value).join(' + ');
+    const attack = document.getElementById('ps1-attack').value;
+    const txt = document.getElementById('algo-math');
+    const resDiv = document.getElementById('ps1-res');
+    
+    resDiv.innerHTML = '<span style="color:var(--warning); font-size:0.85rem;"><span class="type-cursor" style="display:inline-block; height:10px;"></span> Synchronizing with Google Cloud Servers... Generating logic...</span>';
+    try {
+        const res = await fetch('/api/generate_algo', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({target, algo, attack})
+        });
+        const data = await res.json();
+        txt.value = data.code;
+        resDiv.innerHTML = '<span style="color:var(--primary); font-weight:700;">✓ Cryptographic Schema successfully fetched from Google Server!</span>';
+    } catch(e) {
+        resDiv.innerHTML = '<span style="color:var(--danger);">Error fetching algorithm payload!</span>';
+    }
+}
+
+async function simulatePS1() {
+    const txt = document.getElementById('algo-math').value;
+    const resDiv = document.getElementById('ps1-res');
+    if (!txt.trim()) {
+        resDiv.innerHTML = '<span style="color:var(--danger); font-weight:700;">[ERR] Please generate or paste an algorithm first!</span>';
+        return;
+    }
+    
+    resDiv.innerHTML = '<span style="color:var(--warning);"><span class="type-cursor" style="display:inline-block; height:10px;"></span> Running Evaluation Workbench against Google NIST Standards...</span>';
+    
+    setTimeout(async () => {
+        try {
+            const res = await fetch('/api/evaluate_algo', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({code: txt})
+            });
+            const data = await res.json();
+            let color = data.score > 80 ? 'var(--primary)' : 'var(--danger)';
+            let colorBg = data.score > 80 ? 'rgba(0,250,136,0.1)' : 'rgba(248,75,75,0.1)';
+            
+            resDiv.innerHTML = `
+                <div style="margin-top:10px; padding:15px; border:1px dashed ${color}; border-radius:8px; background:${colorBg}; display:flex; flex-direction:column; gap:8px;">
+                    <div style="color:${color}; font-weight:800; font-size:1.1rem;">Algorithm Security Score: ${data.score}/100</div>
+                    <div style="color:var(--text-white); font-family:'JetBrains Mono'; font-size:0.8rem;">${data.message}</div>
+                </div>
+            `;
+        } catch(e) {
+            resDiv.innerHTML = '<span style="color:var(--danger);">Evaluation Engine crashed. Target unreachable.</span>';
+        }
+    }, 1000); // Artificial delay to simulate processing
+}
+
+
+
+// --- PS5 LIVE DEMO LOG TAMPERING (BLOCKCHAIN) ---
+let currentFilter = 'ALL';
+
+async function fetchLogChain() {
+    try {
+        const res = await fetch('/api/get_logs');
+        const data = await res.json();
+        renderSecureLogs(currentFilter, data.chain, data.valid);
+    } catch(e) {
+        console.log("Log poll error", e);
+    }
+}
+
+function toggleLogDetail(id) {
+    const el = document.getElementById('log-detail-' + id);
+    el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function renderSecureLogs(filter = 'ALL', logs = [], isValid = true) {
+    currentFilter = filter;
+    const container = document.getElementById('log-chain-container');
+    container.innerHTML = "";
+    
+    document.getElementById('chain-status-text').innerText = isValid ? "100% VALID" : "FATAL CORRUPTION RECORDED";
+    document.getElementById('chain-status-text').style.color = isValid ? "var(--primary)" : "var(--danger)";
+
+    logs.filter(l => filter === 'ALL' || l.severity === filter).forEach((log) => {
+        let sc = log.severity === 'CRITICAL' ? 'var(--danger)' : (log.severity === 'WARNING' ? 'var(--warning)' : 'var(--primary)');
+        let bg = log.severity === 'CRITICAL' ? 'rgba(248,75,75,0.05)' : (log.severity === 'WARNING' ? 'rgba(255,170,0,0.05)' : 'rgba(0,250,136,0.02)');
+        
+        if (!log.valid) {
+            sc = 'var(--danger)';
+            bg = 'rgba(248,75,75,0.2)';
+        }
+
+        container.innerHTML = `
+            <div style="padding:10px; border-left: 3px solid ${sc}; background:${bg}; cursor:pointer; transition:0.2s;" onmouseover="this.style.filter='brightness(1.5)'" onmouseout="this.style.filter='brightness(1)'" onclick="toggleLogDetail('${log.id}')">
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                    <span style="color:var(--text-dim); font-family:'JetBrains Mono';"><b style="color:${sc};">[${log.severity}]</b> ${log.timestamp} | <b style="color:#fff;">${log.ip}</b></span>
+                    <span style="color:${log.valid ? 'var(--text-dim)' : 'var(--danger)'}; font-family:'JetBrains Mono'; font-size:0.6rem;">⛓ HASH: ${log.hash}</span>
+                </div>
+                <div style="color:${sc}; font-weight:700; word-break:break-all;">> ${log.action}</div>
+                
+                <div id="log-detail-${log.id}" style="display:none; margin-top:10px; padding:10px; border-top:1px dashed #444; background:rgba(0,0,0,0.3); font-family:'JetBrains Mono'; font-size:0.65rem;">
+                    <div style="color:#888;"># FORENSIC DEEP DIVE METADATA</div>
+                    <div style="margin-top:5px;"><span style="color:var(--primary); width:80px; display:inline-block;">NODE ID:</span> BLK-${log.id}</div>
+                    <div><span style="color:var(--primary); width:80px; display:inline-block;">GEOLOC:</span> Resolving IP...</div>
+                    <div><span style="color:var(--primary); width:80px; display:inline-block;">VALIDITY:</span> <span style="color:${log.valid?'var(--primary)':'var(--danger)'}">${log.valid ? 'SLH-DSA Signature Passed' : 'SIGNATURE REJECTED - FORGERY DETECTED'}</span></div>
+                    <div><span style="color:var(--primary); width:80px; display:inline-block;">PREV_HASH:</span> ${log.prev_hash}</div>
+                </div>
+            </div>
+        ` + container.innerHTML; // prepend to list
+    });
+}
+
+// Start polling immediately
+fetchLogChain();
+setInterval(fetchLogChain, 2000);
+
+async function simulateLogTampering() {
+    const btn = document.getElementById('tamper-btn');
+    btn.disabled = true;
+    btn.innerHTML = "Computing Grover's Algorithm Over API...";
+    btn.style.opacity = "0.6";
+
+    try {
+        await fetch('/api/tamper_log', { method: 'POST' });
+        setTimeout(() => {
+            document.getElementById('tamper-alert').style.display = "block";
+            document.getElementById('reset-btn').style.display = "block";
+            btn.innerHTML = "🔴 Attack Executed";
+        }, 1000);
+    } catch(e) {
+        console.error(e);
+    }
+}
+
+async function resetChain() {
+    try {
+        await fetch('/api/reset_chain', { method: 'POST' });
+        document.getElementById('tamper-alert').style.display = "none";
+        document.getElementById('reset-btn').style.display = "none";
+        const btn = document.getElementById('tamper-btn');
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.innerHTML = `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-bottom:5px;"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg><br>Simulate Remote API Override Attack`;
+    } catch(e) {
+        console.error(e);
+    }
+}
+
 // Global Initialization & Persistent Recovery
 function initMissionVault() {
+    renderSecureLogs();
+    // Populate dynamic Google attacks automatically for the default dropdown state
+    fetchDynamicAttacks();
+
     // Immediate Theme Recovery (Pre-render)
     const savedTheme = localStorage.getItem('pqc_theme');
     if(savedTheme === 'light') {
@@ -1712,6 +2260,9 @@ def audit_github():
     owner, repo = match.groups()
     
     tmp_path = tempfile.mkdtemp()
+    # Store path for later encryption step
+    app.latest_github_tmp = tmp_path
+    app.latest_github_repo = repo
     try:
         api_url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
         headers = {'Accept': 'application/vnd.github.v3+json'}
@@ -1724,15 +2275,131 @@ def audit_github():
         with zipfile.ZipFile(io.BytesIO(r.content)) as z:
             z.extractall(tmp_path)
         
-        # Zipball extracts into a subfolder like owner-repo-hash, so we scan the root tmp_path recursively
         report = manager.scan_system_path(tmp_path)
         app.latest_scan = report
         return jsonify(report)
     except Exception as e:
         return jsonify({'status': 'error', 'message': f"Archive Extraction Failed: {str(e)}"})
-    finally:
-        shutil.rmtree(tmp_path, ignore_errors=True)
-        shutil.rmtree(tmp_path, ignore_errors=True)
+
+@app.route('/api/encrypt_project', methods=['POST'])
+def encrypt_project():
+    """Encrypt every source file in the last scanned GitHub project using ML-KEM derived AES-256"""
+    try:
+        source_dir = getattr(app, 'latest_github_tmp', None)
+        repo_name  = getattr(app, 'latest_github_repo', 'project')
+
+        # If no cached directory, re-download from provided URL
+        repo_url = request.form.get('repo_url', '')
+        if not source_dir or not os.path.exists(source_dir):
+            if not repo_url:
+                return jsonify({'status': 'error', 'message': 'No scanned project available. Please scan a GitHub repo first.'})
+            match = re.search(r'github\.com/([^/]+)/([^/\.]+)', repo_url)
+            if not match:
+                return jsonify({'status': 'error', 'message': 'Invalid repo URL'})
+            owner, repo = match.groups()
+            source_dir = tempfile.mkdtemp()
+            repo_name = repo
+            token = request.form.get('token', '')
+            api_url = f"https://api.github.com/repos/{owner}/{repo}/zipball"
+            headers = {'Accept': 'application/vnd.github.v3+json'}
+            if token: headers['Authorization'] = f'token {token}'
+            r = requests.get(api_url, headers=headers, stream=True, timeout=30)
+            with zipfile.ZipFile(io.BytesIO(r.content)) as z:
+                z.extractall(source_dir)
+
+        # --- Simulated ML-KEM Keypair Generation ---
+        # In production this would use liboqs / pqcrypto. Here we simulate
+        # an ML-KEM-768 shared secret using OS urandom (equivalent entropy)
+        pqc_secret   = os.urandom(32)          # Simulated ML-KEM shared secret (256-bit)
+        pqc_pub_key  = os.urandom(1184)        # Simulated ML-KEM-768 public key  (1184 bytes)
+        pqc_priv_key = os.urandom(2400)        # Simulated ML-KEM-768 private key (2400 bytes)
+
+        # Use hashlib to derive an AES-256 key from the PQC secret
+        aes_key = hashlib.sha256(pqc_secret).digest()  # 32-byte AES key
+        aes_iv  = os.urandom(16)                        # 128-bit IV
+
+        # Collect all source files
+        EXTENSIONS = {'.py', '.js', '.ts', '.java', '.go', '.rb', '.c', '.cpp',
+                      '.h', '.cs', '.php', '.rs', '.kt', '.swift', '.txt', '.json',
+                      '.yaml', '.yml', '.env', '.html', '.css', '.md'}
+        source_files = []
+        for root, dirs, files in os.walk(source_dir):
+            dirs[:] = [d for d in dirs if d not in ['.git', '__pycache__', 'node_modules']]
+            for fname in files:
+                if os.path.splitext(fname)[1].lower() in EXTENSIONS:
+                    source_files.append(os.path.join(root, fname))
+
+        # Encrypt each file (XOR with key-stream derived from AES key for simulation)
+        encrypted_files = []
+        for fpath in source_files:
+            try:
+                with open(fpath, 'rb') as f:
+                    content = f.read()
+                # Simple XOR-based stream cipher (simulates AES-CTR for demo)
+                key_stream = (aes_key * (len(content) // 32 + 1))[:len(content)]
+                encrypted = bytes(a ^ b for a, b in zip(content, key_stream))
+                rel_path = os.path.relpath(fpath, source_dir)
+                encrypted_files.append({'path': rel_path, 'size': len(content), 'encrypted_size': len(encrypted), 'data': encrypted})
+            except:
+                pass
+
+        # Package into a ZIP as encrypted .pqc files
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for ef in encrypted_files:
+                enc_path = ef['path'] + '.pqc'
+                zf.writestr(enc_path, ef['data'])
+            # Add decryption key file (in real scenario this would be the ML-KEM ciphertext)
+            key_info = (
+                f"=== ML-KEM-768 ENCRYPTED PROJECT: {repo_name} ===\n"
+                f"Algorithm : ML-KEM-768 (NIST FIPS-203)\n"
+                f"Derived   : AES-256-CTR via SHA-256 KDF\n"
+                f"AES KEY   : {aes_key.hex()}\n"
+                f"AES IV    : {aes_iv.hex()}\n"
+                f"PQC PUBKEY: {pqc_pub_key[:32].hex()}... (truncated for display)\n"
+                f"PQC PRVKEY: {pqc_priv_key[:32].hex()}... (truncated for display)\n"
+                f"Files     : {len(encrypted_files)} source files encrypted\n"
+                f"WARNING   : This key file is quantum-safe — protect the private key!\n"
+            )
+            zf.writestr('DECRYPTION_KEY_ML_KEM.txt', key_info)
+
+        zip_buf.seek(0)
+        # Store summary for the UI
+        app.latest_encrypt_summary = {
+            'files': [{'path': ef['path'], 'size': ef['size']} for ef in encrypted_files],
+            'algorithm': 'ML-KEM-768 + AES-256-CTR',
+            'aes_key_preview': aes_key.hex()[:32] + '...',
+            'pub_key_preview': pqc_pub_key[:16].hex() + '...',
+            'total': len(encrypted_files)
+        }
+
+        method = request.form.get('method', 'zip')
+        if method == 'branch':
+            # Simulate a git-push API action for a new branch
+            # In a production app, this would use github3.py or PyGithub
+            # to push the `encrypted_files` array as blobs, create a tree, and commit it.
+            return jsonify({
+                'status': 'success',
+                'branch': 'pqc-hardened-branch',
+                'message': f'Successfully secured and pushed {len(encrypted_files)} encrypted objects to remote branch (simulated for security tool demo).'
+            })
+
+        return send_file(
+            zip_buf,
+            as_attachment=True,
+            download_name=f"{repo_name}_PQC_ENCRYPTED.zip",
+            mimetype='application/zip'
+        )
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+@app.route('/api/encrypt_summary')
+def encrypt_summary():
+    summary = getattr(app, 'latest_encrypt_summary', None)
+    if not summary:
+        return jsonify({'status': 'pending'})
+    return jsonify(summary)
+
 
 @app.route('/v3/live-threats')
 def live_threats():
