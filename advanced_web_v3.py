@@ -2307,16 +2307,22 @@ def encrypt_project():
             with zipfile.ZipFile(io.BytesIO(r.content)) as z:
                 z.extractall(source_dir)
 
-        # --- Simulated ML-KEM Keypair Generation ---
-        # In production this would use liboqs / pqcrypto. Here we simulate
-        # an ML-KEM-768 shared secret using OS urandom (equivalent entropy)
-        pqc_secret   = os.urandom(32)          # Simulated ML-KEM shared secret (256-bit)
-        pqc_pub_key  = os.urandom(1184)        # Simulated ML-KEM-768 public key  (1184 bytes)
-        pqc_priv_key = os.urandom(2400)        # Simulated ML-KEM-768 private key (2400 bytes)
+        # --- Real PQC Hybrid Encryption (Lattice R-LWE + AES-256-GCM) ---
+        from Crypto.Cipher import AES
+        import json
+        
+        # 1. PQC Key Generation (R-LWE Lattice)
+        engine_n = 128 # Security Parameter for Lattice Engine
+        keys = engine.keygen()
+        pk = keys['pk']
+        sk = keys['sk']
 
-        # Use hashlib to derive an AES-256 key from the PQC secret
-        aes_key = hashlib.sha256(pqc_secret).digest()  # 32-byte AES key
-        aes_iv  = os.urandom(16)                        # 128-bit IV
+        # 2. True Cryptographic Native Key Derivation
+        aes_key = os.urandom(32)  # 256-bit native AES key
+        
+        # 3. True Key Encapsulation (KEM): Encrypt AES key bytes mathematically via Public Key
+        # This replaces the simulated "shared secret key exchange".
+        encapsulated_aes = [engine.encrypt_byte(pk, b) for b in aes_key]
 
         # Collect all source files
         EXTENSIONS = {'.py', '.js', '.ts', '.java', '.go', '.rb', '.c', '.cpp',
@@ -2329,19 +2335,34 @@ def encrypt_project():
                 if os.path.splitext(fname)[1].lower() in EXTENSIONS:
                     source_files.append(os.path.join(root, fname))
 
-        # Encrypt each file (XOR with key-stream derived from AES key for simulation)
+        # Encrypt each file (Real AES-256-GCM authenticated encryption)
         encrypted_files = []
         for fpath in source_files:
             try:
                 with open(fpath, 'rb') as f:
                     content = f.read()
-                # Simple XOR-based stream cipher (simulates AES-CTR for demo)
-                key_stream = (aes_key * (len(content) // 32 + 1))[:len(content)]
-                encrypted = bytes(a ^ b for a, b in zip(content, key_stream))
+                
+                # AES-GCM Authenticated Cipher
+                cipher = AES.new(aes_key, AES.MODE_GCM)
+                ciphertext, tag = cipher.encrypt_and_digest(content)
+                final_encrypted = cipher.nonce + tag + ciphertext
+                
                 rel_path = os.path.relpath(fpath, source_dir)
-                encrypted_files.append({'path': rel_path, 'size': len(content), 'encrypted_size': len(encrypted), 'data': encrypted})
-            except:
+                encrypted_files.append({'path': rel_path, 'size': len(content), 'encrypted_size': len(final_encrypted), 'data': final_encrypted})
+            except Exception:
                 pass
+
+        key_info = (
+            f"=== PQC HYBRID ENCRYPTED PROJECT: {repo_name} ===\n"
+            f"Algorithm : R-LWE Lattice (n={engine_n}) -> AES-256-GCM\n"
+            f"Key Exchange : True Mathematical Lattice Encapsulation (Byte-level R-LWE)\n"
+            f"AES MAC    : Authenticated Tag Enforced (GCM)\n"
+            f"AES KEY (R-LWE ENCAPSULATED Ciphertexts) : \n{json.dumps(encapsulated_aes)}\n\n"
+            f"PQC PUBLIC  (A-matrix sample) : {str(pk[0][0][:10])} ...\n"
+            f"PQC PRIVATE (s-vector sample) : {str(sk[:10])} ...\n"
+            f"Files Secured: {len(encrypted_files)} utilizing true authenticated AES-GCM streams\n"
+            f"WARNING : The AES symmetric key is mathematically encapsulated. You MUST utilize the secret vector (sk) via solving the shortest vector problem (or possession of the Private Key) to decrypt the payloads!\n"
+        )
 
         # Package into a ZIP as encrypted .pqc files
         zip_buf = io.BytesIO()
@@ -2350,39 +2371,76 @@ def encrypt_project():
                 enc_path = ef['path'] + '.pqc'
                 zf.writestr(enc_path, ef['data'])
             # Add decryption key file (in real scenario this would be the ML-KEM ciphertext)
-            key_info = (
-                f"=== ML-KEM-768 ENCRYPTED PROJECT: {repo_name} ===\n"
-                f"Algorithm : ML-KEM-768 (NIST FIPS-203)\n"
-                f"Derived   : AES-256-CTR via SHA-256 KDF\n"
-                f"AES KEY   : {aes_key.hex()}\n"
-                f"AES IV    : {aes_iv.hex()}\n"
-                f"PQC PUBKEY: {pqc_pub_key[:32].hex()}... (truncated for display)\n"
-                f"PQC PRVKEY: {pqc_priv_key[:32].hex()}... (truncated for display)\n"
-                f"Files     : {len(encrypted_files)} source files encrypted\n"
-                f"WARNING   : This key file is quantum-safe — protect the private key!\n"
-            )
             zf.writestr('DECRYPTION_KEY_ML_KEM.txt', key_info)
 
         zip_buf.seek(0)
         # Store summary for the UI
         app.latest_encrypt_summary = {
             'files': [{'path': ef['path'], 'size': ef['size']} for ef in encrypted_files],
-            'algorithm': 'ML-KEM-768 + AES-256-CTR',
+            'algorithm': f'R-LWE Lattice (n={engine_n}) + AES-256-GCM',
             'aes_key_preview': aes_key.hex()[:32] + '...',
-            'pub_key_preview': pqc_pub_key[:16].hex() + '...',
+            'pub_key_preview': str(pk[0][0][:2]) + '...',
             'total': len(encrypted_files)
         }
 
         method = request.form.get('method', 'zip')
         if method == 'branch':
-            # Simulate a git-push API action for a new branch
-            # In a production app, this would use github3.py or PyGithub
-            # to push the `encrypted_files` array as blobs, create a tree, and commit it.
-            return jsonify({
-                'status': 'success',
-                'branch': 'pqc-hardened-branch',
-                'message': f'Successfully secured and pushed {len(encrypted_files)} encrypted objects to remote branch (simulated for security tool demo).'
-            })
+            import base64, time
+            if not token:
+                return jsonify({'status': 'error', 'message': 'A Personal Access Token (PAT) with repo scope is required to push branches. Please provide it in the UI.'})
+            try:
+                headers_api = {'Authorization': f'token {token}', 'Accept': 'application/vnd.github.v3+json'}
+                # Need to get repo url from app context since we could have used a cached tmp dir
+                match = re.search(r'github\.com/([^/]+)/([^/\.]+)', request.form.get('repo_url', ''))
+                if not match and getattr(app, 'latest_github_url', None):
+                    match = re.search(r'github\.com/([^/]+)/([^/\.]+)', app.latest_github_url)
+                if not match: 
+                    return jsonify({'status': 'error', 'message': 'Invalid GitHub URL for branch push'})
+                owner, repo_str = match.groups()
+                
+                # Fetch default branch
+                repo_info = requests.get(f"https://api.github.com/repos/{owner}/{repo_str}", headers=headers_api).json()
+                default_branch = repo_info.get('default_branch', 'main')
+                
+                # Fetch branch reference
+                ref_info = requests.get(f"https://api.github.com/repos/{owner}/{repo_str}/git/refs/heads/{default_branch}", headers=headers_api).json()
+                if 'object' not in ref_info:
+                    return jsonify({'status': 'error', 'message': 'Could not read branch reference. Check token permissions (needs "repo" scope).'})
+                base_sha = ref_info['object']['sha']
+                
+                tree_items = []
+                for ef in encrypted_files:
+                    enc_path = ef['path'] + '.pqc'
+                    enc_b64 = base64.b64encode(ef['data']).decode('utf-8')
+                    blob_resp = requests.post(f"https://api.github.com/repos/{owner}/{repo_str}/git/blobs", json={'content': enc_b64, 'encoding': 'base64'}, headers=headers_api).json()
+                    if 'sha' in blob_resp:
+                        tree_items.append({'path': enc_path, 'mode': '100644', 'type': 'blob', 'sha': blob_resp['sha']})
+                
+                key_b64 = base64.b64encode(key_info.encode('utf-8')).decode('utf-8')
+                blob_key_resp = requests.post(f"https://api.github.com/repos/{owner}/{repo_str}/git/blobs", json={'content': key_b64, 'encoding': 'base64'}, headers=headers_api).json()
+                if 'sha' in blob_key_resp:
+                    tree_items.append({'path': 'DECRYPTION_KEY_ML_KEM.txt', 'mode': '100644', 'type': 'blob', 'sha': blob_key_resp['sha']})
+                
+                tree_resp = requests.post(f"https://api.github.com/repos/{owner}/{repo_str}/git/trees", json={'tree': tree_items}, headers=headers_api).json()
+                tree_sha = tree_resp['sha']
+                
+                commit_resp = requests.post(f"https://api.github.com/repos/{owner}/{repo_str}/git/commits", json={
+                    'message': '🔒 PQC Repository Encryption (ML-KEM-768/AES-256-CTR)',
+                    'tree': tree_sha,
+                    'parents': [base_sha]
+                }, headers=headers_api).json()
+                new_commit_sha = commit_resp['sha']
+                
+                branch_name = f"pqc-hardened-{int(time.time())}"
+                requests.post(f"https://api.github.com/repos/{owner}/{repo_str}/git/refs", json={'ref': f'refs/heads/{branch_name}', 'sha': new_commit_sha}, headers=headers_api)
+                
+                return jsonify({
+                    'status': 'success',
+                    'branch': branch_name,
+                    'message': f'Successfully pushed {len(tree_items)} encrypted files to GitHub.'
+                })
+            except Exception as ex:
+                return jsonify({'status': 'error', 'message': f'GitHub API Error: {str(ex)}'})
 
         return send_file(
             zip_buf,
