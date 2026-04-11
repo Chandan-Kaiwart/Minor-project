@@ -1,8 +1,10 @@
 from flask import Flask, request, jsonify, send_file
 import os, sys, time, random, tempfile, shutil, subprocess, requests, re, zipfile
-import io
+import io, base64
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill
+from Crypto.Cipher import AES
+import base64, json, time
 
 from pqc_advanced_analyzer import AdvancedPQCManager
 from pqc_real_implementation import AdvancedPQCEngine
@@ -186,12 +188,9 @@ def camera_snapshot():
         # Step 2: Fetch snapshot cleanly and explicitly drop the TCP socket
         cam_resp = requests.get(f"http://{cam_ip}:8080/shot.jpg", timeout=2, headers={'Connection': 'close'})
         cam_resp.raise_for_status()
-        import io
-        from flask import send_file
         return send_file(io.BytesIO(cam_resp.content), mimetype='image/jpeg')
         
     except Exception as e:
-        import base64
         pixel = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==')
         return send_file(io.BytesIO(pixel), mimetype='image/png')
 
@@ -586,6 +585,11 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
             System Logs
         </div>
+
+        <div class="nav-section-title">Mission Vault</div>
+        <div id="history-box" style="margin-top:10px; display:flex; flex-direction:column; gap:8px; overflow-y:auto; max-height:250px; padding-right:5px;">
+            <div style="text-align:center; padding:20px; color:var(--text-dim); font-size:0.65rem; border:1px dashed var(--border); border-radius:8px;">Empty Archive</div>
+        </div>
     </div>
 
     <!-- MAIN CONTENT -->
@@ -608,15 +612,23 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                 </div>
                 
                 <div class="card card-bandwidth">
-                    <div class="card-title">Processing Speed </div>
+                    <div class="card-title">Processing & Inventory</div>
                     <div class="big-val" id="val-speed">0.0 <span>Files/s</span></div>
+                    <div style="font-size:0.75rem; color:var(--text-dim);">Scanning <span id="val-files" style="color:#fff; font-weight:700;">0</span> Objects in Buffer</div>
                     <div class="chart-container"><svg class="mini-chart" viewBox="0 0 100 30" preserveAspectRatio="none"><path class="fill chart-path-fill" d="M0,30 L0,22 Q25,18 50,22 T100,18 L100,30 Z" /><path class="chart-path" fill="none" stroke="var(--primary)" stroke-width="2" vector-effect="non-scaling-stroke" d="M0,22 Q25,18 50,22 T100,18" /></svg></div>
                 </div>
 
                 <div class="card card-ready">
                     <div class="card-title">PQC Readiness Index</div>
-                    <div class="big-val" id="val-ready">0%</div>
-                    <div class="sub-val" id="ready-trend">PENDING <i>→</i></div>
+                    <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                        <div>
+                            <div class="big-val" id="val-ready">0%</div>
+                            <div class="sub-val" id="ready-trend">PENDING <i>→</i></div>
+                        </div>
+                        <div class="ring-chart" id="ring-status" style="border: 4px solid var(--border); box-shadow: 0 0 15px rgba(0,250,136,0.1);">
+                            <div class="ring-inner"></div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- NEW ROW 2 : SIDE BLOCK (Terminal) -->
@@ -641,7 +653,7 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
                                 <div style="font-size: 0.6rem; opacity: 0.7;">PQC Logic Reducer Active</div>
                             </div>
                             <div style="flex:1; display:flex; flex-direction:column; gap:8px;">
-                                <div id="gh-action-btn" class="github-btn" onclick="handleGitHubClick()">
+                                <div id="gh-action-btn" class="github-btn" onclick="openGitHubModal()">
                                     <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
                                     <span id="gh-text">Connect GitHub</span>
                                 </div>
@@ -980,19 +992,30 @@ tr td:last-child { border-top-right-radius: 8px; border-bottom-right-radius: 8px
     <div class="modal-card">
         <div class="modal-title">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.372.79 1.102.79 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
-            Select Repository
-        </div>
-        <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom:10px;">Target user: <b id="gh-user-display" style="color:var(--primary);">None</b></div>
-        <input type="password" id="gh-token-in" class="m-input" style="margin-bottom:15px; font-size: 0.7rem; border-color: rgba(255,255,255,0.1);" placeholder="Personal Access Token (for Private Repos)">
-        <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 5px; opacity: 0.8;">Note: Unauthenticated requests only show Public repositories.</div>
-        <div id="repo-container" class="repo-list">
-            <!-- Dynamic repos -->
-            <div style="text-align:center; padding:20px; color:var(--text-dim);">Fetching metadata...</div>
-        </div>
+                Select Repository
+            </div>
+            <div style="font-size: 0.75rem; color: var(--text-dim); margin-bottom:10px;">Target user: <b id="gh-user-display" style="color:var(--primary);">None</b></div>
+            
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <input type="text" id="gh-user-in" class="m-input" style="flex:1; font-size: 0.75rem;" placeholder="GitHub Username">
+                <button class="btn-action" style="width:auto; padding:0 20px; font-size:0.7rem;" onclick="handleSync()">Sync</button>
+            </div>
+
+            <input type="password" id="gh-token-in" class="m-input" style="margin-bottom:15px; font-size: 0.7rem; border-color: rgba(255,255,255,0.1);" placeholder="Personal Access Token (Required for Private Repos)">
+            <div style="font-size: 0.6rem; color: var(--text-dim); margin-bottom: 5px; opacity: 0.8;">Note: Unauthenticated requests only show Public repositories.</div>
+            <div id="repo-container" class="repo-list" style="max-height: 250px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: rgba(0,0,0,0.3);">
+                <!-- Dynamic repos -->
+                <div style="text-align:center; padding:20px; color:var(--text-dim);">Enter username and click Sync</div>
+            </div>
         <div style="margin-top:20px;">
             <button class="btn-action" style="background:#444;" onclick="$('github-modal').style.display='none'">Cancel</button>
         </div>
     </div>
+</div>
+
+<!-- Mission Impossible Runner -->
+<div id="tom-cruise-wrapper">
+    <img src="https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExNnh6amV5a2E4eGZnbTV0MmV5ZHR4eTV4eHQ2eHQ2eHQ2eHQ2eHQmaz0x/3o7TKMGfTTE462/giphy.gif" alt="Running">
 </div>
 
 <script>
@@ -1636,7 +1659,7 @@ function toggleTheme() {
 
 function updateHistoryUI() {
     const box = $('history-box');
-    if(scanHistory.length === 0) return;
+    if(!box || scanHistory.length === 0) return;
     box.innerHTML = scanHistory.map((h, i) => `
         <div class="repo-item" style="padding:15px; border:1px solid var(--border); background:rgba(0,0,0,0.2);">
             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -1661,6 +1684,15 @@ function openCodePad() {
     $('code-modal').style.display = 'flex'; 
     $('code-in').focus();
 }
+function openGitHubModal() {
+    $('github-modal').style.display = 'flex';
+    if (githubUser) {
+        $('gh-user-in').value = githubUser;
+        $('gh-user-display').innerText = githubUser;
+        fetchRepos();
+    }
+}
+
 function closeCodePad() { 
     $('code-modal').style.display = 'none'; 
     const code = $('code-in').value;
@@ -1670,18 +1702,14 @@ function closeCodePad() {
     }
 }
 
-async function handleGitHubClick() {
-    if(!githubUser) {
-        const user = prompt("Enter GitHub Username to synchronize:");
-        if(user) {
-            githubUser = user;
-            localStorage.setItem('pqc_gh_user', user);
-            $('gh-text').innerText = "Syncing...";
-            await fetchRepos();
-        }
+function handleSync() {
+    const user = $('gh-user-in').value.trim();
+    if (user) {
+        githubUser = user;
+        localStorage.setItem('pqc_gh_user', user);
+        fetchRepos();
     } else {
-        $('github-modal').style.display = 'flex';
-        await fetchRepos();
+        alert("Please enter a GitHub username.");
     }
 }
 
@@ -1834,20 +1862,30 @@ async function executeScan() {
     }
 
     try { 
-        audio.currentTime = 0;
-        audio.volume = 0.6;
+        // Audio disabled per user request
+        // audio.currentTime = 0;
+        // audio.volume = 0.6;
         
         audio.onended = () => {
-            runner.classList.remove('running');
-            runner.style.display = 'none';
+            if (runner) {
+                runner.classList.remove('running');
+                runner.style.display = 'none';
+            }
         };
 
-        let p = audio.play(); 
-        if (p !== undefined) {
-            p.catch(e => console.log("Audio Blocked"));
+        // let p = audio.play(); 
+        // if (p !== undefined) {
+        //     p.catch(e => console.log("Audio Blocked"));
+        // }
+        if (runner) {
+            runner.style.display = 'block';
+            runner.classList.add('running');
+            // Auto-cleanup runner if no audio
+            setTimeout(() => {
+                runner.classList.remove('running');
+                runner.style.display = 'none';
+            }, 6000);
         }
-        runner.style.display = 'block';
-        runner.classList.add('running');
     } catch(e) { console.log("Mission Start Error:", e); }
 
     $('term-logs').innerHTML = ''; await typeTerm('term-logs', 'Initiating localized heuristic target analysis...');
@@ -2308,8 +2346,6 @@ def encrypt_project():
                 z.extractall(source_dir)
 
         # --- Real PQC Hybrid Encryption (Lattice R-LWE + AES-256-GCM) ---
-        from Crypto.Cipher import AES
-        import json
         
         # 1. PQC Key Generation (R-LWE Lattice)
         engine_n = 128 # Security Parameter for Lattice Engine
@@ -2385,7 +2421,6 @@ def encrypt_project():
 
         method = request.form.get('method', 'zip')
         if method == 'branch':
-            import base64, time
             if not token:
                 return jsonify({'status': 'error', 'message': 'A Personal Access Token (PAT) with repo scope is required to push branches. Please provide it in the UI.'})
             try:
