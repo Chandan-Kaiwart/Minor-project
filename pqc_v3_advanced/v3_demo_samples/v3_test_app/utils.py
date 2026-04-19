@@ -1,0 +1,7 @@
+def get_crypto_status():
+    return {
+        'status': 'SECURE',
+        'algorithm': 'ML-KEM (Kyber)',
+        'quantum_resistant': True,
+        'standard': 'NIST FIPS 203'
+    }

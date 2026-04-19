@@ -1,0 +1,11 @@
+from flask import Flask, jsonify
+from utils import get_crypto_status
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    return jsonify(get_crypto_status())
+
+if __name__ == '__main__':
+    app.run(port=5005)
