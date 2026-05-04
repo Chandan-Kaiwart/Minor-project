@@ -13,7 +13,8 @@ import hashlib, random, time, os, json
 import requests
 
 app = Flask(__name__)
-CORS(app)  # Allow dashboard to call device directly
+# Robust CORS: Allow everything to ensure the dashboard can talk to the phone
+CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True) 
 
 STATE_FILE = "device_security_state.json"
 
@@ -115,23 +116,34 @@ def upgrade_pqc():
         "pqc_token": "PQC-" + hashlib.sha256(str(time.time()).encode()).hexdigest()[:16].upper()
     })
 
+@app.route('/video_feed')
+def video_feed():
+    if device_state["secured"]: return "BLOCKED", 403
+    def generate():
+        try:
+            # Connect to IP Webcam's raw MJPEG stream
+            r = requests.get('http://127.0.0.1:8080/video', stream=True, timeout=5)
+            for chunk in r.iter_content(chunk_size=1024):
+                yield chunk
+        except:
+            return
+    return Response(generate(), mimetype='multipart/x-mixed-replace; boundary=boundarydonotcross')
+
 @app.route('/camera')
 def camera_snapshot():
     """
-    Device-side Camera Enforcement point.
-    If the device is secured, the firewall BLOCKS the video stream at the edge.
-    If unsecured, it proxies IPWebcam snapshot (127.0.0.1:8080/shot.jpg).
+    Proxies DroidCam video stream to the dashboard.
+    If device is secured, the stream is blocked at the edge.
     """
     if device_state["secured"]:
-        # Block access completely if secured!
-        return "BLOCKED BY PQC SHIELD — ML-KEM Authentication Required", 403
+        return "BLOCKED BY PQC SHIELD", 403
         
     try:
-        # Fetch the actual camera image from the IPWebcam app on the phone
-        r = requests.get('http://127.0.0.1:8080/shot.jpg', timeout=3)
+        # DroidCam frame endpoint is more stable for snapshots
+        r = requests.get('http://127.0.0.1:4747/cam/1/frame.jpg', timeout=3)
         return Response(r.content, mimetype='image/jpeg')
     except Exception as e:
-        return f"Camera Offline: Is IPWebcam running on port 8080? {e}", 500
+        return f"DroidCam Offline: Ensure app is running on port 4747. {e}", 500
 
 @app.route('/reset', methods=['POST'])
 def reset():
